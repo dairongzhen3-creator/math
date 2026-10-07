@@ -399,8 +399,8 @@
   "overview_only_family_ids": [],
   "nonempty_abstracts": 722,
   "reading_status_counts": {
-    "PARTIAL_TEXT_READ": 2,
-    "UNREAD": 720
+    "ABSTRACT_READ": 718,
+    "PARTIAL_TEXT_READ": 4
   },
   "proof_verified_count": 0,
   "discipline_manuscript_counts": {
