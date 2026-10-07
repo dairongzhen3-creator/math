@@ -1,5 +1,6 @@
 name: Build independent math reading index
 
+# 2026-10-07: regenerate from the completed abstract sweep and four partial readings.
 on:
   workflow_dispatch:
   push:
