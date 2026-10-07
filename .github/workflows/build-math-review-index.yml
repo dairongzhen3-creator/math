@@ -22,7 +22,7 @@ jobs:
       - name: Fetch the reviewed indexer and build metadata only
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INDEXER_COMMIT: ddecf2149c60fc41ebf59382a40c02195a723ea4
+          INDEXER_COMMIT: ced60b7e983be8feb2ea5644ce05df1e9d6cd7a0
         shell: bash
         run: |
           set -euo pipefail
