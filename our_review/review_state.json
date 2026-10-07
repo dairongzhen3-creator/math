@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "adc7f1241b42e322a6451854ab7e4b4c146bf78a",
+  "default_status": "UNREAD",
+  "abstract_read_families": [],
+  "papers": {
+    "preprints/Polynomial-PEPS-approximation-of-gapped-square-grid-ground-states-September-24-2026/paper.pdf": {
+      "status": "PARTIAL_TEXT_READ",
+      "date": "2026-10-07",
+      "read_scope": ["build/sections/00-introduction.tex (entire file)", "build/sections/08-companion-interface.tex (entire file)"],
+      "proof_verified": false,
+      "note": "Existence of a polynomial-bond PEPS is not an efficient construction or contraction algorithm. Constants depend on fixed local dimension, interaction norm and global spectral gap. Area-law companion is an explicit unreviewed dependency."
+    },
+    "preprints/Memory-and-precision-in-noiseless-Gaussian-regression-September-27-2026/paper.pdf": {
+      "status": "PARTIAL_TEXT_READ",
+      "date": "2026-10-07",
+      "read_scope": ["build/sections/introduction.tex lines 1-210"],
+      "proof_verified": false,
+      "note": "The model is one-pass finite-state exact Gaussian regression, with M bits, independent rows, fixed finite horizon and angular error. This is not a theorem for arbitrary neural-network parameter counts or multi-pass training."
+    }
+  }
+}
