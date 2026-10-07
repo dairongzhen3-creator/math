@@ -1,0 +1,69 @@
+name: Package selected math sources
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/package-selected-math-sources.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            our_review
+          persist-credentials: false
+      - name: Collect selected public manuscripts without executing manuscript code
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv, hashlib, json, shutil, subprocess
+          from pathlib import Path
+          wanted = {'093','115','119','131','140','148','149','215','216','227','229','261','262','263','265','266','267','273','276','289','325','364','365','374','376'}
+          baseline = 'adc7f1241b42e322a6451854ab7e4b4c146bf78a'
+          rows = list(csv.DictReader(Path('our_review/722_master_index.csv').open(encoding='utf-8-sig')))
+          chosen = [r for r in rows if r['family_id'].zfill(3) in wanted]
+          assert set(r['family_id'].zfill(3) for r in chosen) == wanted
+          paths = sorted(set(str(Path(r['paper_path']).parent) for r in chosen))
+          subprocess.run(['git','sparse-checkout','add','--stdin'], input='\n'.join(paths)+'\n', text=True, check=True)
+          out = Path('reading_bundle')
+          out.mkdir(exist_ok=True)
+          metadata = {'baseline_commit': baseline, 'source_head': subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(), 'family_count': len(wanted), 'paper_count':len(chosen), 'papers':chosen, 'files':[], 'omitted_files':[], 'executed_manuscript_code':False, 'reading_completed':False}
+          allowed = {'.tex','.bib','.md','.txt','.pdf','.py','.sage','.lean','.json','.yaml','.yml','.csv','.sh','.toml'}
+          for root in paths:
+              for p in sorted(Path(root).rglob('*')):
+                  if not p.is_file() or p.is_symlink():
+                      continue
+                  n = p.stat().st_size
+                  if p.suffix.lower() not in allowed or (n > 12000000 and p.suffix.lower() != '.pdf'):
+                      metadata['omitted_files'].append({'path':p.as_posix(),'bytes':n,'reason':'not needed for initial text reading, or large supporting artifact; not reviewed'})
+                      continue
+                  dst = out / p
+                  dst.parent.mkdir(parents=True,exist_ok=True)
+                  shutil.copyfile(p,dst)
+                  b = dst.read_bytes()
+                  metadata['files'].append({'path':p.as_posix(),'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+          for name in ['README.md','CONTENTS.md','LICENSE','overview.tex']:
+              if Path(name).is_file():
+                  shutil.copyfile(name,out/name)
+          for name in ['catalogue_rows.jsonl','review_state.json','03_domain_map_and_reading_order.md','04_post_reading_record_template.md']:
+              if Path('our_review',name).is_file():
+                  shutil.copyfile(Path('our_review',name),out/name)
+          (out/'bundle_manifest.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps({'families':len(wanted),'papers':len(chosen),'source_files':len(metadata['files']),'omitted_artifacts':len(metadata['omitted_files']),'bytes':sum(x['bytes'] for x in metadata['files'])}))
+          for f in sorted(wanted):
+              a = [r for r in chosen if r['family_id'].zfill(3)==f]
+              print(f, len(a), '; '.join(r['paper_id']+' '+r['title'] for r in a))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: selected-25-family-sources
+          path: reading_bundle/
+          retention-days: 7
+          compression-level: 6
+          if-no-files-found: error
