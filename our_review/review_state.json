@@ -2,13 +2,14 @@
   "schema_version": 1,
   "baseline_commit": "adc7f1241b42e322a6451854ab7e4b4c146bf78a",
   "default_status": "UNREAD",
+  "last_updated": "2026-10-08",
   "abstract_review": {
     "date": "2026-10-07",
     "manuscripts_read": 722,
     "method": "Sequential reading of all 37 complete catalogue-abstract packets, with truncated response tails fetched separately. This is abstract-level reading, not full manuscript or proof verification.",
     "first_packet": "our_review/abstract_batches/P0001-P0020.md",
     "last_packet": "our_review/abstract_batches/P0721-P0722.md",
-    "scope": "Public catalogue abstracts and titles; four additional partial manuscript readings are listed separately."
+    "scope": "Historical abstract-reading record from 2026-10-07; not independently replayed by the 2026-10-08 recovery. Current manuscript-level coverage is in papers."
   },
   "abstract_read_families": [
     "001", "002", "003", "004", "005", "006", "007", "008", "009", "010",
@@ -70,14 +71,39 @@
       "date": "2026-10-07",
       "read_scope": ["build/sections/00-introduction.tex (entire file, lines 1-160 and 161 through end)"],
       "proof_verified": false,
-      "note": "Independent input ports, finite energy and finitely many modes; entanglement is allowed within a port. Main proof unread. The claimed new range includes arbitrary internally entangled multimode inputs; the one-mode constrained attenuator entropy bound has earlier precedents."
+      "note": "Retains last archived coverage. An interrupted later run reportedly read further, but no durable full-text note was recovered; do not infer completed proof review from that report. Independent input ports, finite energy and finitely many modes; entanglement is allowed within a port."
     },
     "preprints/The-complete-Crouzeix-theorem-September-23-2026/paper.pdf": {
-      "status": "PARTIAL_TEXT_READ",
-      "date": "2026-10-07",
-      "read_scope": ["build/main.tex lines 1-270 (definitions, main statements, context, proof roadmap and opening of Section 2; included figure not read)"],
+      "status": "FULL_TEXT_READ",
+      "date": "2026-10-08",
+      "reading_medium": "Full LaTeX source and supplied figure-page rendering; not full PDF/source parity checking",
+      "read_scope": ["build/main.tex: beginning through end{document}, Sections 1-6 and Appendix A", "build/references.tex: entire bibliography (cited papers themselves not all read)", "build/figures/coordinates.tex and supplied PDF page 3 Figure 1"],
+      "source_blob": "2ace452c83a9ceb994a87ae9009441706d90a961",
       "proof_verified": false,
-      "note": "Complete constant-two numerical-range function bound and common positive representation. Not an eigenvalue enclosure or spectral-gap certificate. Main comparison proof and appendices unread; PDF/source agreement and Lean builds unverified."
+      "lean_built": false,
+      "pdf_source_parity_checked": false,
+      "reading_note": "our_review/notes/F325_full_reading_20261008.md",
+      "note": "Source-complete reading, not independent global proof acceptance. Function-calculus bound, not a spectral-gap or truncation certificate. Shared tools with the direct proof prevent counting the manuscripts as wholly independent verification."
+    },
+    "preprints/A-direct-proof-of-the-complete-Crouzeix-inequality-September-26-2026/paper.pdf": {
+      "status": "FULL_TEXT_READ",
+      "date": "2026-10-08",
+      "reading_medium": "Full LaTeX source and supplied figure-page rendering; not full PDF/source parity checking",
+      "read_scope": ["build/main.tex: beginning through end{document}, Sections 1-4 and Appendix A", "build/references.tex: entire bibliography (cited papers themselves not all read)", "supplied PDF page 3 Figure 1 together with source caption and surrounding definitions"],
+      "source_blob": "5976502d77febf477933f36f6205c6e1aa6370ae",
+      "proof_verified": false,
+      "lean_built": false,
+      "pdf_source_parity_checked": false,
+      "reading_note": "our_review/notes/F325_full_reading_20261008.md",
+      "note": "Read coefficient-kernel construction, ordered tests, weighted dual comparison, outer approximation and collar appendix. Four local numerical checks passed; these do not prove the global constant-two theorem."
     }
+  },
+  "recovery_summary": {
+    "date": "2026-10-08",
+    "source_complete_manuscripts_with_durable_notes": 2,
+    "selected_families_with_durable_source_complete_notes": ["325"],
+    "all_25_families_complete": false,
+    "independent_global_proof_verifications": 0,
+    "generated_index_status": "Generated master index, CSV, JSONL and index_audit.json still reflect the 2026-10-07 snapshot until regenerated from this state file."
   }
 }
