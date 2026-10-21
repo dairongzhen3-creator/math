@@ -1,0 +1,53 @@
+name: Fetch published E18 source supplements
+on:
+  push:
+    branches: ['cloud-public-sources-901-e18-20261022']
+    paths: ['.github/workflows/901-e18-public-source-fetch.yml']
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Fetch official publicly accessible PDF and Excel supplements
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,pathlib,urllib.request,urllib.error,os
+          out=pathlib.Path('public_901_e18_source');out.mkdir()
+          candidates=[
+            ('Ruparell2016_suppl_PMC','https://pmc.ncbi.nlm.nih.gov/articles/PMC5018880/bin/srep33101-s1.pdf','.pdf'),
+            ('Ruparell2016_suppl_instance','https://pmc.ncbi.nlm.nih.gov/articles/instance/5018880/bin/srep33101-s1.pdf','.pdf'),
+            ('Ruparell2016_suppl_Nature','https://static-content.springer.com/esm/art%3A10.1038%2Fsrep33101/MediaObjects/41598_2016_BFsrep33101_MOESM1_ESM.pdf','.pdf'),
+            ('Deng2021_additional15','https://static-content.springer.com/esm/art%3A10.1186%2Fs12915-021-01023-2/MediaObjects/12915_2021_1023_MOESM15_ESM.xlsx','.xlsx'),
+            ('Deng2021_additional16','https://static-content.springer.com/esm/art%3A10.1186%2Fs12915-021-01023-2/MediaObjects/12915_2021_1023_MOESM16_ESM.xlsx','.xlsx'),
+            ('Deng2021_additional15_alt','https://link.springer.com/content/pdf/10.1186/s12915-021-01023-2/MediaObjects/12915_2021_1023_MOESM15_ESM.xlsx','.xlsx'),
+            ('Deng2021_additional16_alt','https://link.springer.com/content/pdf/10.1186/s12915-021-01023-2/MediaObjects/12915_2021_1023_MOESM16_ESM.xlsx','.xlsx'),
+          ]
+          manifest={'study':'901 E18 public source fetch only; no analysis','run_id':os.getenv('GITHUB_RUN_ID'),'head_sha':os.getenv('GITHUB_SHA'),'attempts':[]}
+          seen=set()
+          for name,url,ext in candidates:
+            ent={'name':name,'url':url,'status':'FAILED'}
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'open-science-source-fetch/1.0 (academic integrity audit)','Accept':'application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream'})
+              with urllib.request.urlopen(req,timeout=17) as resp:
+                data=resp.read(15_000_001);ent['response_http_status']=resp.status
+              if len(data)>15_000_000:raise ValueError('File > 15MB source budget')
+              if ext=='.pdf' and not data.startswith(b'%PDF-'):raise ValueError('Not PDF magic')
+              if ext=='.xlsx' and not data.startswith(b'PK\\x03\\x04'):raise ValueError('Not XLSX ZIP magic')
+              sha=hashlib.sha256(data).hexdigest()
+              ent.update({'status':'PASS','bytes':len(data),'sha256':sha})
+              if sha not in seen:(out/(name+ext)).write_bytes(data);seen.add(sha)
+            except Exception as e:ent['error']=str(e)[:180]
+            manifest['attempts'].append(ent)
+            print(json.dumps(ent))
+          (out/'FETCH_MANIFEST.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\\n')
+          PY
+      - name: Publish short-lived source transport with real failures
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-901-e18-supplement-sources
+          path: public_901_e18_source/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
