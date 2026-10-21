@@ -1,0 +1,57 @@
+name: Convert pinned public time-series format
+on:
+  push:
+    branches: ['cloud-public-sources-901-e15-20261021']
+    paths: ['.github/workflows/901-public-parquet-convert.yml']
+permissions:
+  contents: read
+jobs:
+  convert:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Install pinned public Parquet reader
+        run: python3 -m pip install --disable-pip-version-check pyarrow==19.0.1
+      - name: Lossless numeric conversion of five public source files
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import csv, hashlib, io, json, os, pathlib, platform, urllib.request
+          import pyarrow as pa
+          import pyarrow.parquet as pq
+          out=pathlib.Path('converted_public_sources');out.mkdir()
+          commit='d14d0caaa07299f13d1b1121d1e4630454fd724b'
+          hashes={'control':'cb8db0e660690e14e6ab243e4565160f93af4801','200mM':'8ec6fafc765c8ebd28690a9ddaf604cf813ef868','300mM':'5a8b15c41f90dfec9abe4e8792c11729a5e93be5','400mM':'5a2bb35651ae54243f5a749de177553a8e94056b','500mM':'40df15665ca620ef1f6d55e9349b406c48d0cfbe'}
+          manifest={'run_id':os.environ['GITHUB_RUN_ID'],'workflow_commit':os.environ['GITHUB_SHA'],'source_commit':commit,'python':platform.python_version(),'pyarrow':pa.__version__,'scientific_analysis_performed':False,'files':[]}
+          for name,expected in hashes.items():
+              url=f'https://raw.githubusercontent.com/wadhwalab/2026-Meneses-Osmotic/{commit}/data/time-series/tmrm/{name}.parquet'
+              with urllib.request.urlopen(url,timeout=45) as r: b=r.read(2000001)
+              assert len(b)<2000001
+              blob=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+              assert blob==expected
+              table=pq.read_table(pa.BufferReader(b)); rows=table.to_pylist()
+              columns=table.column_names
+              assert columns==['track_id','frame','fluorescence'],columns
+              dest=out/f'tmrm_{name}.csv'
+              with dest.open('w',newline='') as f:
+                  w=csv.DictWriter(f,fieldnames=columns);w.writeheader();w.writerows(rows)
+              with dest.open(newline='') as f: back=list(csv.DictReader(f))
+              assert len(rows)==len(back)
+              comparisons=0
+              for original,again in zip(rows,back):
+                  for col in columns:
+                      x=original[col]
+                      y=None if again[col]=='' else (int(again[col]) if isinstance(x,int) else float(again[col]))
+                      assert x==y,(name,col,x,y)
+                      comparisons+=1
+              item={'name':name,'url':url,'source_sha256':hashlib.sha256(b).hexdigest(),'source_git_blob_sha1':blob,'source_bytes':len(b),'csv_name':dest.name,'csv_sha256':hashlib.sha256(dest.read_bytes()).hexdigest(),'rows':len(rows),'columns':columns,'schema':str(table.schema),'exact_numeric_roundtrip_checks':comparisons,'status':'PASS'}
+              manifest['files'].append(item); print(json.dumps(item))
+          (out/'CONVERSION_MANIFEST.json').write_text(json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-tmrm-lossless-csv-901-e15
+          path: converted_public_sources/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
