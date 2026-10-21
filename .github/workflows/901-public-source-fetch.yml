@@ -1,0 +1,77 @@
+name: Fetch bounded public experimental source files
+on:
+  push:
+    branches: ['cloud-public-sources-901-e15-20261021']
+    paths: ['.github/workflows/901-public-source-fetch.yml']
+permissions:
+  contents: read
+concurrency:
+  group: public-source-fetch-901-e15
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Download published sources only and verify file structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import concurrent.futures, datetime, hashlib, io, json, os, pathlib, platform, time, urllib.request, zipfile
+          out=pathlib.Path('public_sources'); out.mkdir()
+          commit='d14d0caaa07299f13d1b1121d1e4630454fd724b'
+          specs=[]
+          for n in (2,3,4):
+              name=f'elife-62848-fig{n}-data1-v2.xlsx'
+              specs.append((name,'https://cdn.elifesciences.org/articles/62848/'+name,'xlsx',None))
+          hashes={'control':'cb8db0e660690e14e6ab243e4565160f93af4801','200mM':'8ec6fafc765c8ebd28690a9ddaf604cf813ef868','300mM':'5a8b15c41f90dfec9abe4e8792c11729a5e93be5','400mM':'5a2bb35651ae54243f5a749de177553a8e94056b','500mM':'40df15665ca620ef1f6d55e9349b406c48d0cfbe'}
+          base=f'https://raw.githubusercontent.com/wadhwalab/2026-Meneses-Osmotic/{commit}/'
+          for name,sha in hashes.items():
+              specs.append(('tmrm_'+name+'.parquet',base+'data/time-series/tmrm/'+name+'.parquet','parquet',sha))
+          for path in ('README.md','docs/HOW_TO_READ_DATA.md','docs/BIOLOGICAL_CONTEXT.md','outputs/key-results/tmrm_population_summary.csv','code/TMRM-anaylsis/analyze_tmrm_population_dff.py','manuscript/manuscript.tex'):
+              specs.append(('Meneses_'+path.replace('/','_'),base+path,'text',None))
+          def fetch(spec):
+              name,url,kind,expected=spec
+              row={'filename':name,'source_url':url,'kind':kind,'expected_git_blob_sha1':expected,'attempts':[]}
+              for attempt in range(2):
+                  try:
+                      request=urllib.request.Request(url,headers={'User-Agent':'Public-experimental-data-reproducibility/1.0'})
+                      with urllib.request.urlopen(request,timeout=35) as response:
+                          b=response.read(20_000_001)
+                          row['http_status']=response.status; row['resolved_url']=response.url
+                      if len(b)>20_000_000: raise ValueError('Per-file 20 MB bound exceeded')
+                      if kind=='xlsx':
+                          with zipfile.ZipFile(io.BytesIO(b)) as z:
+                              if z.testzip() is not None: raise ValueError('ZIP CRC failure')
+                              if 'xl/workbook.xml' not in z.namelist(): raise ValueError('No workbook.xml')
+                              row['zip_members']=len(z.namelist())
+                      elif kind=='parquet':
+                          if not (b[:4]==b'PAR1' and b[-4:]==b'PAR1'): raise ValueError('Invalid Parquet magic')
+                      elif kind=='text':
+                          b.decode('utf-8')
+                      blob=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+                      if expected and blob!=expected: raise ValueError('Pinned Git blob mismatch')
+                      (out/name).write_bytes(b)
+                      row.update(status='RECEIVED_VERIFIED',bytes=len(b),sha256=hashlib.sha256(b).hexdigest(),git_blob_sha1=blob)
+                      return row
+                  except Exception as e:
+                      row['attempts'].append({'attempt':attempt+1,'error':str(e)})
+                      time.sleep(1)
+              row['status']='FAILED'; return row
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+              rows=list(pool.map(fetch,specs))
+          manifest={'created_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_research_doi':['10.7554/eLife.62848','10.1016/j.bpj.2026.04.014'],'source_commit':commit,'backend':'GitHub-hosted ubuntu-22.04','run_id':os.environ['GITHUB_RUN_ID'],'workflow_commit':os.environ['GITHUB_SHA'],'python':platform.python_version(),'files':rows,'executed_downloaded_code':False,'private_data_included':False}
+          (out/'SOURCE_MANIFEST.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2))
+          for row in rows: print(json.dumps(row,ensure_ascii=False))
+          print('Received',sum(r['status']=='RECEIVED_VERIFIED' for r in rows),'of',len(rows))
+          PY
+      - name: Return verified public-source bytes for downstream private analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-experimental-sources-901-e15
+          path: public_sources/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
