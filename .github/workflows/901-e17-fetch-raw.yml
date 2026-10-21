@@ -1,0 +1,54 @@
+name: Fetch pinned public E17 motor archive
+on:
+  push:
+    branches: ['cloud-public-sources-901-e17-20261021']
+    paths: ['.github/workflows/901-e17-fetch-raw.yml']
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - name: Download and verify public source bytes only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          commit='5810d9273746c55575e506b217d6bdbed682a672'
+          filename='file2000res.npy.7z'
+          url=f'https://raw.githubusercontent.com/SMADynamics/BFM_radial_fluct/{commit}/{filename}'
+          expected_size=86518504
+          expected_blob='b9217fc73efc62f15dc598c0221edc1ad8ffba9d'
+          folder=pathlib.Path('public_901_e17_source');folder.mkdir(exist_ok=True)
+          path=folder/filename
+          request=urllib.request.Request(url,headers={'User-Agent':'901-e17-public-source-integrity/1.0'})
+          with urllib.request.urlopen(request,timeout=90) as src, path.open('wb') as dest:
+              total=0
+              while True:
+                  chunk=src.read(1024*1024)
+                  if not chunk: break
+                  total+=len(chunk)
+                  if total>90_000_000:raise RuntimeError('Unexpected size >90MB')
+                  dest.write(chunk)
+          if total!=expected_size:raise RuntimeError(f'Size mismatch {total}')
+          with path.open('rb') as src:
+              if src.read(6)!=bytes.fromhex('377abcaf271c'):raise RuntimeError('Not a 7z archive')
+          git_sha1=hashlib.sha1()
+          git_sha1.update(f'blob {total}\0'.encode())
+          sha256=hashlib.sha256()
+          with path.open('rb') as src:
+              for chunk in iter(lambda:src.read(4*1024*1024),b''):
+                  git_sha1.update(chunk);sha256.update(chunk)
+          if git_sha1.hexdigest()!=expected_blob:raise RuntimeError('Git blob mismatch')
+          info={'origin_repository':'SMADynamics/BFM_radial_fluct','source_commit':commit,'filename':filename,'source_url':url,'bytes':total,'git_blob_sha1':git_sha1.hexdigest(),'sha256':sha256.hexdigest(),'7z_header':True,'executed_pickle':False,'scientific_analysis':False,'job_run_id':os.getenv('GITHUB_RUN_ID'),'job_commit':os.getenv('GITHUB_SHA')}
+          (folder/'FETCH_MANIFEST.json').write_text(json.dumps(info,indent=2)+'\n')
+          print(json.dumps(info))
+          PY
+      - name: One-day public-source transport artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-nord-10khz-source-901-e17
+          path: public_901_e17_source/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
