@@ -1,0 +1,63 @@
+name: Fetch open E19 primary PDF evidence
+on:
+  push:
+    branches: ['cloud-public-sources-901-e19-20261022']
+    paths: ['.github/workflows/901-e19-public-pdfs.yml']
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 9
+    steps:
+      - name: Only download and hash public archived papers
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, hashlib, json, os, pathlib, urllib.request
+          out=pathlib.Path('e19_primary_public_pdfs');out.mkdir()
+          ids={'McIlvaine1977':'PMC1473230','Ulitzur1978':'PMC222167','Makemson1986':'PMC214441'}
+          candidates=[]
+          for name,pmc in ids.items():
+            candidates.append((name,'europepmc',f'https://europepmc.org/articles/{pmc}?pdf=render'))
+            candidates.append((name,'ncbi',f'https://pmc.ncbi.nlm.nih.gov/articles/{pmc}/pdf/'))
+            candidates.append((name,'ncbi_old',f'https://www.ncbi.nlm.nih.gov/pmc/articles/{pmc}/pdf/'))
+          candidates.append(('McIlvaine1977','cell','https://www.cell.com/biophysj/pdf/S0006-3495(77)85624-5.pdf'))
+          candidates.append(('McIlvaine1977','citeseer','https://citeseerx.ist.psu.edu/document?doi=a0beddba700fa5cf715ca719997543e23d06c718&repid=rep1&type=pdf'))
+          candidates.append(('Ulitzur1978','asm','https://journals.asm.org/doi/pdf/10.1128/jb.133.3.1307-1313.1978'))
+          candidates.append(('Makemson1986','asm','https://journals.asm.org/doi/pdf/10.1128/jb.165.2.461-466.1986'))
+          def probe(row):
+            name,label,url=row
+            result={'study':name,'route':label,'url':url,'status':'FAIL'}
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'OpenScienceSourceAudit/1.0','Accept':'application/pdf,application/octet-stream;q=0.8'})
+              with urllib.request.urlopen(req,timeout=19) as q:
+                b=q.read(10_000_001)
+                result['http_status']=q.status
+                result['final_url']=q.url
+              if len(b)>10_000_000:raise RuntimeError('source over 10MB')
+              if not b.startswith(b'%PDF-'):raise RuntimeError('non-PDF response')
+              result.update({'status':'PASS','length':len(b),'sha256':hashlib.sha256(b).hexdigest(),'pdf_bytes':b})
+            except Exception as ex:result['error']=str(ex)[:200]
+            return result
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            rows=list(pool.map(probe,candidates))
+          successes={}
+          for item in rows:
+            b=item.pop('pdf_bytes',None)
+            if b is None:continue
+            key=item['study']
+            if key not in successes:
+              path=out/(key+'.pdf');path.write_bytes(b)
+              successes[key]={'file':path.name,'sha256':item['sha256'],'length':len(b),'route':item['route']}
+          manifest={'run_id':os.environ.get('GITHUB_RUN_ID'),'run_commit':os.environ.get('GITHUB_SHA'),'purpose':'public primary PDF retrieval only; no experiment or scientific analysis','successes':successes,'attempts':rows}
+          (out/'SOURCE_FETCH_MANIFEST.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
+          print(json.dumps({'successes':successes,'route_statuses':[{k:v for k,v in x.items() if k in ('study','route','status','error')} for x in rows]},ensure_ascii=False))
+          PY
+      - name: Keep public source transport for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: e19-verified-public-primary-papers
+          path: e19_primary_public_pdfs/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
