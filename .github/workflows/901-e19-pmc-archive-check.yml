@@ -1,0 +1,57 @@
+name: Inspect public archival article access E19
+on:
+  push:
+    branches: ['cloud-public-sources-901-e19-20261022']
+    paths: ['.github/workflows/901-e19-pmc-archive-check.yml']
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Probe OA archive metadata and return PDF only when valid
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures,hashlib,json,os,pathlib,urllib.request
+          out=pathlib.Path('e19_pmc_archive_probe');out.mkdir()
+          ids={'McIlvaine1977':'PMC1473230','Ulitzur1978':'PMC222167','Makemson1986':'PMC214441'}
+          candidates=[]
+          for name,id in ids.items():
+            for label,url in [
+              ('oa_api',f'https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={id}'),
+              ('europepmc_xml',f'https://www.ebi.ac.uk/europepmc/webservices/rest/{id}/fullTextXML'),
+              ('pmc_scan_pdf',f'https://pmc.ncbi.nlm.nih.gov/articles/{id}/pdf/'),
+              ('pmc_bioc',f'https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_xml/{id}/unicode')
+            ]: candidates.append((name,label,url))
+          def probe(triplet):
+            n,label,url=triplet; result={'study':n,'kind':label,'url':url}
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0 (compatible; academic-source-verification)','Accept':'application/pdf,application/xml,text/xml,*/*'})
+              with urllib.request.urlopen(req,timeout=13) as r:
+                data=r.read(11_000_001)
+                result['response_type']=r.headers.get('Content-Type')
+                result['response_url']=r.url
+              result['size']=len(data);result['sha256']=hashlib.sha256(data).hexdigest()
+              result['prefix_200']=repr(data[:200])
+              if data.startswith(b'%PDF-') and len(data)<11_000_001:
+                (out/f'{n}_{label}.pdf').write_bytes(data)
+                result['download']='VERIFIED_PDF'
+              elif data.lstrip().startswith((b'<?xml',b'<response',b'<article')) and len(data)<3_000_000:
+                (out/f'{n}_{label}.xml').write_bytes(data)
+                result['download']='XML_ARCHIVE'
+              else:result['download']='NOT_PRIMARY_PDF'
+            except Exception as e:result['error']=str(e)[:200]
+            return result
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex: results=list(ex.map(probe,candidates))
+          (out/'ACCESS_DIAGNOSTICS.json').write_text(json.dumps(results,indent=2))
+          print(json.dumps([{k:v for k,v in d.items() if k not in ('prefix_200','sha256')} for d in results]))
+          PY
+      - name: Temporary public-source diagnostic transport
+        uses: actions/upload-artifact@v4
+        with:
+          name: e19-archival-source-diagnostics
+          path: e19_pmc_archive_probe/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
