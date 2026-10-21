@@ -34,14 +34,14 @@ jobs:
                 data=resp.read(15_000_001);ent['response_http_status']=resp.status
               if len(data)>15_000_000:raise ValueError('File > 15MB source budget')
               if ext=='.pdf' and not data.startswith(b'%PDF-'):raise ValueError('Not PDF magic')
-              if ext=='.xlsx' and not data.startswith(b'PK\\x03\\x04'):raise ValueError('Not XLSX ZIP magic')
+              if ext=='.xlsx' and not data.startswith(bytes([80,75,3,4])):raise ValueError('Not XLSX ZIP magic')
               sha=hashlib.sha256(data).hexdigest()
               ent.update({'status':'PASS','bytes':len(data),'sha256':sha})
               if sha not in seen:(out/(name+ext)).write_bytes(data);seen.add(sha)
             except Exception as e:ent['error']=str(e)[:180]
             manifest['attempts'].append(ent)
             print(json.dumps(ent))
-          (out/'FETCH_MANIFEST.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\\n')
+          (out/'FETCH_MANIFEST.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
           PY
       - name: Publish short-lived source transport with real failures
         uses: actions/upload-artifact@v4
