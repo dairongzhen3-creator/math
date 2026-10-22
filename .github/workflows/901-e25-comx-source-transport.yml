@@ -1,0 +1,59 @@
+name: E25 pinned Springer public Supplementary Data only
+on:
+  push:
+    branches: ['cloud-public-sources-901-e25-20261022']
+    paths: ['.github/workflows/901-e25-comx-source-transport.yml']
+permissions: {}
+jobs:
+  fetch_public_supplement:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Transport and verify official ComX published spreadsheet
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,hashlib,zipfile,io,json,os
+          dest=pathlib.Path('e25_public_supplement');dest.mkdir(exist_ok=True)
+          path='art%3A10.1038%2Fs42003-020-01553-5/MediaObjects/42003_2020_1553_MOESM4_ESM.xlsx'
+          sources=[
+          'https://media.springernature.com/original/springer-static/esm/'+path,
+          'https://static-content.springer.com/esm/'+path,
+          'https://pmc.ncbi.nlm.nih.gov/articles/PMC7794433/bin/42003_2020_1553_MOESM4_ESM.xlsx'
+          ]
+          trials=[];result={}
+          for url in sources:
+            attempt={'url':url,'status':'FAILED'}
+            try:
+              request=urllib.request.Request(url,headers={'User-Agent':'PublicAcademicSourceIntegrity/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,*/*'})
+              with urllib.request.urlopen(request,timeout=19) as response:
+                raw=response.read(8_000_001)
+                attempt['http_status']=response.status
+                attempt['content_type']=response.headers.get('Content-Type')
+              if len(raw)>8_000_000:raise RuntimeError('file exceeds 8MB allowed limit')
+              if not raw.startswith(bytes([0x50,0x4b,0x03,0x04])):raise RuntimeError('not XLSX signature; may be HTML')
+              with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                if z.testzip() is not None:raise RuntimeError('bad ZIP CRC')
+                names=z.namelist()
+                if 'xl/workbook.xml' not in names or '[Content_Types].xml' not in names:raise RuntimeError('not XLSX')
+                if any('vbaProject.bin' in p for p in names):raise RuntimeError('unexpected active macros')
+              name='Dogsa2021_ComX_SupplementaryData1_original.xlsx'
+              (dest/name).write_bytes(raw)
+              result={'file_name':name,'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),'members':len(names),'source_url':url}
+              attempt.update({'status':'PASS','bytes':len(raw),'sha256':result['sha256']})
+              trials.append(attempt);break
+            except Exception as e:
+              attempt['error']=type(e).__name__+': '+str(e)[:180]
+              trials.append(attempt)
+          manifest={'doi':'10.1038/s42003-020-01553-5','run_id':os.environ.get('GITHUB_RUN_ID'),'no_scientific_computation':True,'download':result,'trials':trials}
+          (dest/'SOURCE_FETCH_MANIFEST.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(manifest,ensure_ascii=False))
+          PY
+      - name: One day source-only transport
+        uses: actions/upload-artifact@v4
+        with:
+          name: e25-comx-public-supplement-only
+          path: e25_public_supplement/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
