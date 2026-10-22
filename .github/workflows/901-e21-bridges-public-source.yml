@@ -1,0 +1,52 @@
+name: Transport public PLOS QS numerical supplement E21
+on:
+  push:
+    branches: ['cloud-public-sources-901-e21-20261022']
+    paths: ['.github/workflows/901-e21-bridges-public-source.yml']
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Download and verify only the publisher's public XLSX source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib,io,json,os,pathlib,urllib.request,zipfile
+          folder=pathlib.Path('e21_public_source_transport'); folder.mkdir()
+          urls=[
+             'https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3000429.s012&type=supplementary',
+             'https://pmc.ncbi.nlm.nih.gov/articles/PMC6872173/bin/pbio.3000429.s012.xlsx',
+             'https://journals.plos.org/plosbiology/article/file?id=10.1371%2Fjournal.pbio.3000429.s012&type=supplementary',
+          ]
+          trace=[]
+          for url in urls:
+            obj={'url':url,'status':'FAIL'}
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'Academic-data-integrity-study/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,*/*'})
+              with urllib.request.urlopen(req,timeout=20) as resp:
+                 raw=resp.read(5_000_001);obj['code']=resp.status;obj['response_url']=resp.url
+              if len(raw)>5_000_000: raise RuntimeError('byte cap exceeded')
+              if not raw.startswith(bytes((80,75,3,4))):raise RuntimeError('not XLSX, possibly HTML challenge')
+              with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                assert z.testzip() is None
+                names=z.namelist()
+                if '[Content_Types].xml' not in names or 'xl/workbook.xml' not in names:raise RuntimeError('not valid XLSX OOXML')
+                if any('vbaProject.bin' in p for p in names):raise RuntimeError('unexpected macro')
+              dest=folder/'BridgesBassler2019_PLOS_S1Data_official.xlsx';dest.write_bytes(raw)
+              obj.update({'status':'PASS','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'member_count':len(names)})
+              trace.append(obj);break
+            except Exception as e:obj['error']=str(e)[:260]
+            trace.append(obj)
+          manifest={'paper_doi':'10.1371/journal.pbio.3000429','supplement_doi':'10.1371/journal.pbio.3000429.s012','purpose':'public XLSX source transfer and format checks only; no research calculation','run_id':os.environ.get('GITHUB_RUN_ID'),'commit':os.environ.get('GITHUB_SHA'),'attempts':trace}
+          (folder/'SOURCE_FETCH_MANIFEST.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(manifest))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e21-plos-bridges-original-xlsx
+          path: e21_public_source_transport/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
