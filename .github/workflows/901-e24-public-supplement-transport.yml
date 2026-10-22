@@ -1,0 +1,50 @@
+name: Fetch two published PLOS metabolism supplements E24
+on:
+  push:
+    branches: ['cloud-public-sources-901-e24-20261022']
+    paths: ['.github/workflows/901-e24-public-supplement-transport.yml']
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Download and hash two official published spreadsheets only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, io, json, os, pathlib, urllib.request, zipfile
+          targets={'S3':'s012','S9':'s018'}
+          out=pathlib.Path('e24_public_supplements');out.mkdir()
+          log={'study_doi':'10.1371/journal.pbio.3002891','operation':'transport original publisher open numerical data only, no scientific analysis','workflow_run_id':os.getenv('GITHUB_RUN_ID'),'results':{}}
+          for label,suffix in targets.items():
+              url=f'https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002891.{suffix}&type=supplementary'
+              record={'source_url':url,'status':'FAILED'}
+              try:
+                req=urllib.request.Request(url,headers={'User-Agent':'PublicAcademicSourceIntegrity/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*'})
+                with urllib.request.urlopen(req,timeout=25) as resp:
+                    raw=resp.read(3_000_001)
+                    record['http_status']=resp.status;record['final_url']=resp.url
+                if len(raw)>3_000_000:raise ValueError('Exceeded bounded 3 MB file maximum')
+                if not raw.startswith(bytes([0x50,0x4b,0x03,0x04])):raise ValueError('Not an XLSX ZIP file signature')
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                  assert z.testzip() is None
+                  names=z.namelist()
+                  if '[Content_Types].xml' not in names or 'xl/workbook.xml' not in names:raise ValueError('Invalid XLSX structure')
+                  if any(p.endswith('vbaProject.bin') for p in names):raise ValueError('Macro-containing workbook')
+                filename=f'Simpson2024_PLOS_{label}_official.xlsx'
+                (out/filename).write_bytes(raw)
+                record.update({'status':'PASS','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'zip_members':len(names),'stored_name':filename})
+              except Exception as e:record['error']=type(e).__name__+': '+str(e)[:180]
+              log['results'][label]=record
+          (out/'SOURCE_TRANSPORT_LOG.json').write_text(json.dumps(log,indent=2,ensure_ascii=False)+'\n')
+          print(json.dumps(log,ensure_ascii=False))
+          PY
+      - name: Public source transport artifact, one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: e24-published-plos-S3-S9-sources
+          path: e24_public_supplements/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
