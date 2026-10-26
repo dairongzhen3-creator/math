@@ -1,0 +1,52 @@
+name: 901 E97 retrieve one verified NIH PMC source-data workbook
+on:
+  push:
+    branches: ['cloud-public-sources-901-e97-20261026']
+    paths: ['.github/workflows/901-e97-pmc-s3-xlsx.yml']
+permissions: {}
+jobs:
+  single-official-xlsx:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch only exact NLM metadata-declared xlsx and verify MD5, CRC, scope
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import io,os,pathlib,json,hashlib,urllib.request,zipfile,xml.etree.ElementTree as ET
+          root=pathlib.Path('e97_one_official_xlsx');root.mkdir()
+          uri='https://pmc-oa-opendata.s3.amazonaws.com/PMC12306166.1/msphere.01050-24-s0002.xlsx?md5=6621b604bd53596c22fec87e7f680b28'
+          m={'stage':'E97','project':901,'source':'NLM PMC 2026 Article Datasets official S3 metadata PMC12306166.1.json media_urls','url':uri,'expected_md5':'6621b604bd53596c22fec87e7f680b28','status':'NOT_OBTAINED'}
+          try:
+              req=urllib.request.Request(uri,headers={'User-Agent':'NoncommercialScientificDataVerification/1.0'})
+              with urllib.request.urlopen(req,timeout=65) as resp:
+                  size=resp.headers.get('Content-Length')
+                  if size and int(size)>6500000:raise ValueError('PUBLISHED_XLSX_EXCEEDS_BOUND')
+                  raw=resp.read(6500001)
+                  m.update(http=resp.status,content_type=resp.headers.get('Content-Type'),final_url=resp.url)
+              if len(raw)>6500000:raise ValueError('XLSX_OVER_CAP')
+              if not raw.startswith(b'PK\x03\x04'):raise ValueError('NOT_XLSX_BINARY')
+              m.update(bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),md5=hashlib.md5(raw).hexdigest())
+              if m['md5']!=m['expected_md5']:raise ValueError('OFFICIAL_SOURCE_MD5_MISMATCH')
+              z=zipfile.ZipFile(io.BytesIO(raw))
+              entries=z.infolist()
+              if 'xl/workbook.xml' not in z.namelist():raise ValueError('OOXML_MISSING_WORKBOOK')
+              if len(entries)>250:raise ValueError('OOXML_COMPONENT_COUNT_BOUND')
+              if any(e.filename.startswith('/') or '..' in pathlib.PurePosixPath(e.filename).parts for e in entries):raise ValueError('UNSAFE_MEMBER_PATH')
+              if sum(e.file_size for e in entries)>280000000:raise ValueError('DECOMPRESSION_SIZE_BOUND')
+              bad=z.testzip()
+              if bad:raise ValueError('ZIP_CRC_FAIL_'+bad)
+              sheets=[el.get('name') for el in ET.fromstring(z.read('xl/workbook.xml')).findall('.//{*}sheet')]
+              m.update(status='OFFICIAL_MD5_ZIP_CRC_PASS',zip_members=len(entries),sheet_names=sheets,declared_sheets=len(sheets))
+              (root/'msphere.01050-24-s0002_official_S1_S7.xlsx').write_bytes(raw)
+          except Exception as e:m.update(status='SOURCE_FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:220])
+          (root/'E97_official_xlsx_source_receipt.json').write_text(json.dumps(m,indent=2,ensure_ascii=False)+'\n')
+          print('E97_XLSX_RECEIPT='+json.dumps(m,ensure_ascii=False))
+          PY
+      - name: Archive source once, retention one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e97-nih-pmc-supplement-s1-to-s7
+          path: e97_one_official_xlsx/
+          retention-days: 1
+          if-no-files-found: error
