@@ -1,0 +1,76 @@
+name: 901 E99 retrieve NIH original native Vibrio QS source workbook
+on:
+  push:
+    branches: ['cloud-public-sources-901-e99-20261026']
+    paths: ['.github/workflows/901-e99-nih-verified-s1-source.yml']
+permissions: {}
+jobs:
+  official-source:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: MD5 verify one 2MB native-QS author workbook, sheet scope audit, no statistical inference
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, urllib.request, hashlib, json, zipfile, io, xml.etree.ElementTree as ET, re
+          out=pathlib.Path('e99_nih_source');out.mkdir()
+          uri='https://pmc-oa-opendata.s3.amazonaws.com/PMC12121927.1/pbio.3003187.s001.xlsx?md5=a2d4c3d10208cae008a73487daf97464'
+          result={'project':901,'stage':'E99','study':'Johnson Fei Wingreen Bassler PLoS Biology 2025 DOI 10.1371/journal.pbio.3003187','source':'Official NIH PMC OA article media, same MD5 as Figshare article 29088968','uri':uri,'expected_md5':'a2d4c3d10208cae008a73487daf97464','status':'NOT_ACQUIRED'}
+          try:
+              req=urllib.request.Request(uri,headers={'User-Agent':'ScientificVerificationReadOnly/1.0'})
+              with urllib.request.urlopen(req,timeout=48) as resp:
+                  if resp.headers.get('Content-Length') and int(resp.headers['Content-Length'])>3300000: raise ValueError('OVER_BOUND_CONTENT_LENGTH')
+                  raw=resp.read(3300001)
+                  result['http']=resp.status
+                  result['content_type']=resp.headers.get('Content-Type','')
+              if len(raw)>3300000 or not raw.startswith(b'PK\x03\x04'):raise ValueError('BAD_XLSX_BYTES')
+              result.update(bytes=len(raw),md5=hashlib.md5(raw).hexdigest(),sha256=hashlib.sha256(raw).hexdigest())
+              if result['md5']!=result['expected_md5']:raise ValueError('PUBLISHER_MD5_MISMATCH')
+              z=zipfile.ZipFile(io.BytesIO(raw))
+              if z.testzip():raise ValueError('ZIP_CRC_FAILURE')
+              infos=z.infolist()
+              if len(infos)>300 or sum(x.file_size for x in infos)>180000000:raise ValueError('UNCOMPRESSED_CAP')
+              if 'xl/workbook.xml' not in z.namelist():raise ValueError('NOT_OOXML')
+              names=[el.get('name') for el in ET.fromstring(z.read('xl/workbook.xml')).iter() if el.tag.endswith('}sheet')]
+              strings=[]
+              if 'xl/sharedStrings.xml' in z.namelist():
+                  if z.getinfo('xl/sharedStrings.xml').file_size<28000000:
+                      string_root=ET.fromstring(z.read('xl/sharedStrings.xml'))
+                      strings=[''.join(e.text or '' for e in item.iter() if e.tag.endswith('}t'))[:170] for item in string_root if item.tag.endswith('}si')]
+              sheetaudit=[]
+              paths=sorted((p for p in z.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml',p)),key=lambda s:int(re.search(r'sheet(\d+)',s).group(1)))
+              for spath in paths[:90]:
+                  nr=0;nc=0;head=[];meta={'path':spath,'sheet_number':int(re.search(r'sheet(\d+)',spath).group(1)),'size_uncompressed':z.getinfo(spath).file_size}
+                  with z.open(spath) as fh:
+                      for event,el in ET.iterparse(fh,events=('end',)):
+                          if not el.tag.endswith('}row'):continue
+                          nr+=1;vals=[]
+                          for c in el:
+                              if not c.tag.endswith('}c'):continue
+                              nc+=1
+                              if nr>3:continue
+                              v=next((i.text for i in c if i.tag.endswith('}v')),None)
+                              if c.get('t')=='s' and v:
+                                  try:v=strings[int(v)] if strings else 'UNRESOLVED_SHARED_'+v
+                                  except Exception:v='BAD_SHARED_INDEX'
+                              elif c.get('t')=='inlineStr':v=''.join(i.text or '' for i in c.iter() if i.tag.endswith('}t'))
+                              if v is not None:vals.append({'cell':c.get('r'),'value':str(v)[:95]})
+                          if nr<=3:head.append(vals[:22])
+                          el.clear()
+                  meta.update(rows=nr,nonempty_cells=nc,first_three_rows=head)
+                  sheetaudit.append(meta)
+              result.update(status='OFFICIAL_MD5_CRC_PASS_WITH_SHEET_SOURCE_AUDIT',sheet_names=names,number_of_sheet_xml=len(paths),sheets=sheetaudit)
+              (out/'Johnson2025_PLOS_S1_official.xlsx').write_bytes(raw)
+              (out/'E99_sheets_and_source_identity_QC.json').write_text(json.dumps({'sheet_names':names,'sheets':sheetaudit},ensure_ascii=False,indent=2)+'\n')
+          except Exception as e:result.update(status='FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:240])
+          (out/'E99_nih_official_workbook_receipt.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          print('E99_NIH_RESULT='+json.dumps(result,ensure_ascii=False)[:26000])
+          PY
+      - name: Store one day original workbook plus machine audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e99-nih-pmc-vibrio-source-workbook
+          path: e99_nih_source/
+          retention-days: 1
+          if-no-files-found: error
