@@ -1,0 +1,81 @@
+name: 901 E93 bounded Jayakumar official supplementary clone lineage check
+on:
+  push:
+    branches: ['cloud-public-sources-901-e93-20261026']
+    paths: ['.github/workflows/901-e93-msystems-lineage-supplement.yml']
+permissions: {}
+jobs:
+  public-supplement:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Fetch public XML metadata and at most two small official DOCX supplemental tables
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,urllib.request,urllib.error,hashlib,zipfile,io,xml.etree.ElementTree as ET,os
+          d=pathlib.Path('e93_official_supplements');d.mkdir()
+          links=[
+            ('Table_S1','https://pmc.ncbi.nlm.nih.gov/articles/instance/9600717/bin/msystems.00354-22-s0002.docx'),
+            ('Table_S5','https://pmc.ncbi.nlm.nih.gov/articles/instance/9600717/bin/msystems.00354-22-s0006.docx')
+          ]
+          result={'project':901,'stage':'E93','source_paper':'https://pmc.ncbi.nlm.nih.gov/articles/PMC9600717/','operation':'bounded public supplement audit only','run_id':os.getenv('GITHUB_RUN_ID'),'items':[]}
+          # NLM full-text XML, metadata only. A failed call cannot justify claims about missing supplements.
+          try:
+            xurl='https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9600717/fullTextXML'
+            with urllib.request.urlopen(urllib.request.Request(xurl,headers={'User-Agent':'OpenAcademicSourceAudit/1.0'}),timeout=28) as resp:
+              xml=resp.read(600001)
+              result['metadata_http']=resp.status
+            if len(xml)>600000:raise ValueError('FULL_TEXT_METADATA_TOO_LARGE')
+            root=ET.fromstring(xml)
+            found=[]
+            for e in root.iter():
+              if e.tag.rsplit('}',1)[-1]!='supplementary-material':continue
+              label=' '.join(''.join(e.itertext()).split())[:180]
+              urls=[(k,v) for k,v in e.attrib.items() if 'href' in k]
+              found.append({'id':e.attrib.get('id'),'label':label,'url_attrs':urls})
+            result['xml_supplement_count']=len(found)
+            result['xml_supplement_index']=found[:14]
+            (d/'E93_official_supplement_index.json').write_text(json.dumps(found,ensure_ascii=False,indent=2),encoding='utf8')
+            for wanted,token in [('Table_S1','S1'),('Table_S5','S5')]:
+              for item in found:
+                if ('TABLE '+token) in item['label'].upper().replace('\u00a0',' ') or ('Table '+token) in item['label']):
+                  for k,v in item['url_attrs']:
+                    if v.endswith('.docx'):
+                      fname=v.rsplit('/',1)[-1]
+                      for i,(tag,old) in enumerate(links):
+                        if tag==wanted:links[i]=(tag,'https://pmc.ncbi.nlm.nih.gov/articles/instance/9600717/bin/'+fname)
+                  break
+          except Exception as e:
+            result['metadata_error']=str(e)[:200]
+          for name,url in links:
+            r={'name':name,'url':url,'status':'NOT_RECEIVED'}
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'OpenAcademicSourceAudit/1.0','Accept':'application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*'})
+              with urllib.request.urlopen(req,timeout=30) as res:
+                b=res.read(100001);r['http']=res.status;r['content_type']=res.headers.get('Content-Type')
+              r['bytes_received']=len(b)
+              if len(b)>100000:raise ValueError('FILE_BOUND_100KB')
+              if not b.startswith(b'PK\x03\x04'):raise ValueError('NOT_DOCX_SIGNATURE')
+              with zipfile.ZipFile(io.BytesIO(b)) as z:
+                infos=z.infolist()
+                if len(infos)>160 or sum(i.file_size for i in infos)>4_000_000:raise ValueError('ZIP_SIZE_BOUND')
+                if z.testzip() is not None:raise ValueError('ZIP_CRC_FAIL')
+                if not {'word/document.xml','[Content_Types].xml'}.issubset(z.namelist()):raise ValueError('NOT_DOCX')
+                if any('..' in i.filename.split('/') or i.filename.startswith('/') for i in infos):raise ValueError('UNSAFE_ZIP_PATH')
+                if any(i.filename.endswith('vbaProject.bin') for i in infos):raise ValueError('MACROS_REJECTED')
+              filename='901_E93_'+name+'_official.docx'
+              (d/filename).write_bytes(b)
+              r.update(status='PASS_DOCX_CRC',size=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest(),stored_name=filename)
+            except Exception as e:r.update(status='BLOCKED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:200])
+            result['items'].append(r)
+          (d/'E93_supplement_intake_receipt.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print(json.dumps({k:v for k,v in result.items() if k!='xml_supplement_index'},ensure_ascii=False))
+          PY
+      - name: Upload research public source or failure receipts for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e93-jayakumar-source-lineage
+          path: e93_official_supplements/
+          retention-days: 1
+          if-no-files-found: error
