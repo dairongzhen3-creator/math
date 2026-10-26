@@ -1,0 +1,58 @@
+name: 901 E92 bounded Figshare QS workbook intake
+on:
+  push:
+    branches: ['cloud-public-sources-901-e92-20261026']
+    paths: ['.github/workflows/901-e92-jayakumar-source.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,io,zipfile,json,pathlib,os
+          out=pathlib.Path('e92_public_qs');out.mkdir()
+          record={'stage':'E92','article_id':21191254,'run_id':os.getenv('GITHUB_RUN_ID'),'status':'NOT_RECEIVED'}
+          try:
+            url='https://api.figshare.com/v2/articles/21191254'
+            with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'AcademicDatasetVerification/1.0'}),timeout=25) as r:
+              raw=r.read(125001)
+              record['metadata_http']=r.status
+            if len(raw)>125000:raise ValueError('METADATA_BOUND')
+            metadata=json.loads(raw)
+            files=[{'name':f.get('name'),'id':f.get('id'),'size':f.get('size'),'supplied_md5':f.get('supplied_md5') or f.get('computed_md5'),'download_url':f.get('download_url')} for f in metadata.get('files',[])]
+            record['metadata_files']=files
+            (out/'E92_official_article_metadata.json').write_bytes(raw)
+            targets=[f for f in files if f['name'] and f['name'].lower().endswith('.xlsx') and int(f['size'])<1_500_000]
+            if len(targets)!=1:raise ValueError('NOT_EXACTLY_ONE_SMALL_WORKBOOK')
+            f=targets[0]
+            u=f['download_url']
+            if not u.startswith('https://ndownloader.figshare.com/files/') and not u.startswith('https://figshare.com/ndownloader/files/'):raise ValueError('UNEXPECTED_DOWNLOAD_HOST')
+            with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'AcademicDatasetVerification/1.0'}),timeout=45) as r:
+              body=r.read(1_500_001)
+              record['download_http']=r.status
+            record['raw_size']=len(body);record['md5']=hashlib.md5(body).hexdigest()
+            if len(body)>1500000:raise ValueError('BODY_TOO_LARGE')
+            if f['supplied_md5'] and record['md5']!=f['supplied_md5']:raise ValueError('OFFICIAL_MD5_MISMATCH')
+            if not body.startswith(bytes([80,75,3,4])):raise ValueError('NOT_XLSX')
+            with zipfile.ZipFile(io.BytesIO(body)) as z:
+              members=z.infolist()
+              if len(members)>500 or sum(x.file_size for x in members)>25_000_000:raise ValueError('ZIP_BOMB')
+              if z.testzip() is not None:raise ValueError('ZIP_CRC_FAIL')
+              if not {'[Content_Types].xml','xl/workbook.xml'}.issubset(z.namelist()):raise ValueError('NOT_OFFICE')
+              if any('..' in x.filename.split('/') for x in members):raise ValueError('UNSAFE_PATH')
+            (out/'E92_Jayakumar2022_raw_official.xlsx').write_bytes(body)
+            record.update(status='PASS_MD5_XLSX_CRC',sha256=hashlib.sha256(body).hexdigest(),zip_members=len(members),original_name=f['name'])
+          except Exception as e:
+            record.update(status='BLOCKED_OR_REJECTED',exception=type(e).__name__,error=str(e)[:240])
+          (out/'E92_intake_receipt.json').write_text(json.dumps(record,indent=2,ensure_ascii=False)+'\n')
+          print(json.dumps(record,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 901-e92-public-source
+          path: e92_public_qs/
+          retention-days: 1
+          if-no-files-found: error
