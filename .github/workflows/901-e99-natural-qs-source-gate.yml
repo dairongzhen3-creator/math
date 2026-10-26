@@ -1,0 +1,123 @@
+name: 901 E99 bounded independent natural-QS and source-data gate
+on:
+  push:
+    branches: ['cloud-public-sources-901-e99-20261026']
+    paths: ['.github/workflows/901-e99-natural-qs-source-gate.yml']
+permissions: {}
+jobs:
+  e99:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Two independent papers, official metadata and one small native-QS source workbook
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, urllib.request, urllib.parse, hashlib, json, re, xml.etree.ElementTree as ET, io, zipfile, csv, os
+          d=pathlib.Path('e99_sources');d.mkdir()
+          UA='NoncommercialScientificProvenance/1.0 (public DOI sources, bounded no-personal-data)'
+          allow={'api.figshare.com','figshare.com','ndownloader.figshare.com','pmc-oa-opendata.s3.amazonaws.com','www.ebi.ac.uk'}
+          results={'project':901,'stage':'E99','run_id':os.getenv('GITHUB_RUN_ID'),'scientific_gate':'natural AHL chemical production + recipient response + certified independent culture/date and future outcome; not equivalent to synthetic induction or destructive image samples','files':[]}
+          def fetch(label,url,max_b,extension,kind):
+              it={'label':label,'url':url,'max_bytes':max_b,'status':'NOT_OBTAINED'}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in allow:raise ValueError('SOURCE_HOST_NOT_ALLOWLISTED')
+                  req=urllib.request.Request(url,headers={'User-Agent':UA,'Accept':'*/*'})
+                  with urllib.request.urlopen(req,timeout=40) as resp:
+                      u=resp.url
+                      host=urllib.parse.urlsplit(u).hostname
+                      if host not in allow:raise ValueError('REDIRECT_HOST_NOT_ALLOWLISTED_'+str(host))
+                      l=resp.headers.get('Content-Length')
+                      if l and int(l)>max_b:raise ValueError('BODY_LENGTH_CAP')
+                      b=resp.read(max_b+1)
+                      it.update(http=resp.status,mime=(resp.headers.get('Content-Type') or '')[:100],final_url=u[:220])
+                  if len(b)>max_b:raise ValueError('BODY_CAP')
+                  if len(b)<20:raise ValueError('EMPTY_RESPONSE')
+                  if b[:200].lstrip().lower().startswith((b'<html',b'<!doctype html')):raise ValueError('HTML_CHALLENGE')
+                  if kind=='json': obj=json.loads(b)
+                  elif kind=='xlsx':
+                      if not b.startswith(b'PK\x03\x04'):raise ValueError('NOT_XLSX_MAGIC')
+                      z=zipfile.ZipFile(io.BytesIO(b))
+                      if 'xl/workbook.xml' not in z.namelist() or z.testzip():raise ValueError('NOT_VALID_OOXML')
+                      if sum(x.file_size for x in z.infolist())>200000000:raise ValueError('DECOMPRESSION_CAP')
+                      it['zip_count']=len(z.namelist())
+                  it.update(status='ACCEPTED_SOURCE_BYTES',bytes=len(b),md5=hashlib.md5(b).hexdigest(),sha256=hashlib.sha256(b).hexdigest())
+                  (d/(label+extension)).write_bytes(b)
+                  return it,b
+              except Exception as e:
+                  it.update(status='FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:230])
+                  return it,None
+          # A: independent natural Pseudomonas LasR study: strict supplementary type gate
+          for pmc in ('PMC10729764','PMC12121927'):
+              item,b=fetch('NLM_'+pmc+'_v1_metadata','https://pmc-oa-opendata.s3.amazonaws.com/metadata/'+pmc+'.1.json',130000,'.json','json')
+              if b:
+                  meta=json.loads(b)
+                  item['paper_title']=meta.get('title')
+                  item['doi']=meta.get('doi')
+                  item['media_items']=len(meta.get('media_urls') or [])
+                  item['media_urls']=[(x if isinstance(x,str) else x.get('url',str(x)))[:260] for x in meta.get('media_urls',[])][:35]
+              results['files'].append(item)
+          # B: PLoS 2025 natural Vibrio QS spatial/time source; source lacks direct chemical AHL (different autoinducer class)
+          item,b=fetch('Figshare_Johnson2025_official_article_metadata','https://api.figshare.com/v2/articles/29088968',350000,'.json','json')
+          results['files'].append(item)
+          if b:
+              meta=json.loads(b)
+              files=meta.get('files',[])
+              item.update(article_title=meta.get('title'),doi=meta.get('doi'),files=[{'id':x.get('id'),'name':x.get('name'),'size':x.get('size'),'computed_md5':x.get('computed_md5'),'download_url':x.get('download_url')} for x in files])
+              matches=[f for f in files if f.get('name','').lower().endswith(('.xlsx','.xls'))]
+              if len(matches)==1:
+                  src=matches[0]
+                  url=src.get('download_url') or f"https://figshare.com/ndownloader/files/{src.get('id')}"
+                  i,raw=fetch('Johnson2025_PLOS_S1_original_source_data',url,3400000,'.xlsx','xlsx')
+                  if raw:
+                      expmd=src.get('computed_md5')
+                      i['provider_md5']=expmd
+                      i['provider_md5_match']=bool(expmd and i['md5']==expmd)
+                      if expmd and i['md5']!=expmd:
+                          i['status']='REJECT_PROVIDER_MD5_MISMATCH'
+                          (d/'Johnson2025_PLOS_S1_original_source_data.xlsx').unlink()
+                      else:
+                          z=zipfile.ZipFile(io.BytesIO(raw))
+                          sheets=[p for p in z.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml',p)]
+                          shared=[]
+                          if 'xl/sharedStrings.xml' in z.namelist() and z.getinfo('xl/sharedStrings.xml').file_size<25000000:
+                              ss=ET.fromstring(z.read('xl/sharedStrings.xml'))
+                              shared=[''.join(e.text or '' for e in el.iter() if e.tag.endswith('}t'))[:160] for el in ss if el.tag.endswith('}si')]
+                          sheetnames=[x.get('name') for x in ET.fromstring(z.read('xl/workbook.xml')).iter() if x.tag.endswith('}sheet')]
+                          summaries=[]
+                          for path in sheets[:60]:
+                              nrow=0; ncell=0; first=[]
+                              with z.open(path) as f:
+                                  for event,row in ET.iterparse(f,events=('end',)):
+                                      if not row.tag.endswith('}row'):continue
+                                      nrow+=1; cellout=[]
+                                      for c in row:
+                                          if not c.tag.endswith('}c'):continue
+                                          ncell+=1
+                                          if nrow>4:continue
+                                          v=next((v.text for v in c.iter() if v.tag.endswith('}v')),None)
+                                          if c.get('t')=='s' and v is not None:
+                                              try:v=shared[int(v)]
+                                              except (IndexError,ValueError):v='UNRESOLVED_SHARED_STRING'
+                                          elif c.get('t')=='inlineStr':v=''.join(e.text or '' for e in c.iter() if e.tag.endswith('}t'))
+                                          if v is not None:cellout.append([c.get('r'),str(v)[:85]])
+                                      if nrow<=4:first.append(cellout[:30])
+                                      row.clear()
+                              summaries.append({'file':path,'sheet_index':int(re.search(r'sheet(\d+)',path).group(1)),'rows':nrow,'cells':ncell,'first_rows':first})
+                          i.update(sheets=sheetnames,per_sheet_summaries=summaries,shared_strings=len(shared))
+                          (d/'E99_Johnson2025_sheets_machine_summary.json').write_text(json.dumps({'sheets':sheetnames,'summaries':summaries},ensure_ascii=False,indent=2)+'\n')
+                  results['files'].append(i)
+              else:results['figshare_xlsx_count']=len(matches)
+          results['new_eligible_natural_AHL_sender_receiver_joint_physical_cultures']=0
+          results['independent_Q3_status']='NOT_TESTABLE_UNLESS_CHEMICAL_AND_RECEIVER_JOINT_PARENT_KEYS'
+          results['bit_per_joule']='NOT_IDENTIFIED'
+          (d/'E99_bounded_official_source_manifest.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
+          print('E99_MACHINE='+json.dumps(results,ensure_ascii=False)[:26000])
+          PY
+      - name: Preserve bounded original metadata and one workbook for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e99-independent-natural-qs-source-gate
+          path: e99_sources/
+          retention-days: 1
+          if-no-files-found: error
