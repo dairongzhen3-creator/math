@@ -1,0 +1,168 @@
+name: 901 E97 official sample-key and supplementary-file verification
+on:
+  push:
+    branches: ['cloud-public-sources-901-e97-20261026']
+    paths: ['.github/workflows/901-e97-official-join-gate.yml']
+permissions: {}
+jobs:
+  official-sources:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Bounded official records only, no genomes or MS raw
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.parse,urllib.error,hashlib,json,xml.etree.ElementTree as ET,zipfile,io,re,collections
+          root=pathlib.Path('e97_official');root.mkdir()
+          out={'project':901,'stage':'E97','scope':'Official S3 supplementary metadata and 1 xlsx; BioSample conflict records; MassIVE small parameter+public listing','sources':[]}
+          ua='NoncommercialScientificProvenance/1.0 (bounded public data; no credentials)'
+          ALLOW={'pmc-oa-opendata.s3.amazonaws.com','www.ebi.ac.uk','europepmc.org','www.ncbi.nlm.nih.gov','eutils.ncbi.nlm.nih.gov','pmc.ncbi.nlm.nih.gov','journals.asm.org','massive.ucsd.edu'}
+          def safe_fetch(label,url,cap,ext,validator=None):
+              item={'name':label,'url':url,'limit_bytes':cap,'status':'NOT_OBTAINED'}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in ALLOW:raise ValueError('SOURCE_HOST_NOT_ALLOWLISTED')
+                  req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
+                  with urllib.request.urlopen(req,timeout=35) as res:
+                      finalurl=res.url
+                      if urllib.parse.urlsplit(finalurl).hostname not in ALLOW:raise ValueError('REDIRECT_HOST_NOT_ALLOWLISTED')
+                      size_header=res.headers.get('Content-Length')
+                      if size_header and int(size_header)>cap:raise ValueError('CONTENT_LENGTH_OVER_BOUND')
+                      content=res.read(cap+1)
+                      item.update(http=res.status,content_type=(res.headers.get('Content-Type') or '')[:110],final_url=finalurl[:600])
+                  if len(content)>cap:raise ValueError('BODY_OVER_BOUND')
+                  if len(content)<10:raise ValueError('EMPTY_DATA')
+                  head=content[:500].lower().lstrip()
+                  if head.startswith(b'<!doctype html') or head.startswith(b'<html'):raise ValueError('HTML_NOT_OFFICIAL_SOURCE_BINARY')
+                  if validator=='xlsx':
+                      if not content.startswith(b'PK\x03\x04'):raise ValueError('NOT_XLSX_PK')
+                      f=zipfile.ZipFile(io.BytesIO(content))
+                      names=f.namelist()
+                      if 'xl/workbook.xml' not in names:raise ValueError('NOT_XLSX')
+                      if any(n.startswith('/') or '..' in pathlib.PurePosixPath(n).parts for n in names):raise ValueError('UNSAFE_ZIP_PATHS')
+                      if sum(z.file_size for z in f.infolist())>250000000:raise ValueError('DECOMPRESSED_SIZE_CAP')
+                      bad=f.testzip()
+                      if bad is not None:raise ValueError('BAD_ZIP_CRC')
+                      item.update(zip_members=len(names),xlsx_sheets=ET.fromstring(f.read('xl/workbook.xml')).findall('.//{*}sheet'))
+                      item['xlsx_sheets']=[x.get('name') for x in item['xlsx_sheets']]
+                  elif validator=='zip':
+                      if not content.startswith(b'PK\x03\x04'):raise ValueError('NOT_ZIP_PK')
+                      f=zipfile.ZipFile(io.BytesIO(content))
+                      names=f.namelist()
+                      if len(names)>100:raise ValueError('ZIP_MEMBER_CAP')
+                      item['zip_names']=[n[:160] for n in names]
+                  elif validator=='xml':
+                      tree=ET.fromstring(content)
+                      item['xml_root']=tree.tag[:90]
+                  elif validator=='json':
+                      tree=json.loads(content)
+                      item['json_keys']=list(tree)[:25] if isinstance(tree,dict) else []
+                  item.update(status='VALID_SOURCE_BYTES',bytes=len(content),sha256=hashlib.sha256(content).hexdigest(),md5=hashlib.md5(content).hexdigest())
+                  (root/(label+ext)).write_bytes(content)
+                  return item,content
+              except Exception as e:
+                  item.update(status='FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:240])
+                  return item,None
+          # 1: new current PMC S3 object per NIH/NLM 2026 format
+          base='https://pmc-oa-opendata.s3.amazonaws.com/'
+          article='PMC12306166'
+          sm=None
+          for version in (1,2):
+              item,dat=safe_fetch('NLM_S3_'+article+'_v'+str(version)+'_metadata',base+'metadata/'+article+'.'+str(version)+'.json',500000,'.json','json')
+              out['sources'].append(item)
+              if dat:
+                  j=json.loads(dat)
+                  if j.get('pmcid','').lstrip('PMC') !=article.lstrip('PMC'): continue
+                  media=j.get('media_urls') or []
+                  out['s3_version']=str(version)
+                  out['media_count']=len(media)
+                  out['media_names']=[(m if isinstance(m,str) else str(m.get('url',m)))[:250] for m in media if 's0002' in str(m) or 'xlsx' in str(m).lower()]
+                  for obj in media:
+                      u=obj if isinstance(obj,str) else obj.get('url') or obj.get('uri') or ''
+                      if 'msphere.01050-24-s0002.xlsx' in u:
+                          sm=u;break
+                  if sm:break
+          if sm:
+              item,dat=safe_fetch('NLM_S3_Armes_Tables_S1_S7',sm,6300000,'.xlsx','xlsx')
+              out['sources'].append(item)
+              out['supplement_obtained']=bool(dat)
+          if not sm or not out.get('supplement_obtained'):
+              # official Europe PMC supplementaryFiles fallback
+              u='https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12306166/supplementaryFiles'
+              item,data=safe_fetch('EuropePMC_Armes_supplements',u,7500000,'.zip','zip')
+              out['sources'].append(item)
+              if data:
+                  z=zipfile.ZipFile(io.BytesIO(data))
+                  for n in z.namelist():
+                      if n.endswith('msphere.01050-24-s0002.xlsx'):
+                          info=z.getinfo(n)
+                          if info.file_size<=6300000:
+                              sub=z.read(n)
+                              if sub.startswith(b'PK\x03\x04'):
+                                  sf=zipfile.ZipFile(io.BytesIO(sub))
+                                  if 'xl/workbook.xml' in sf.namelist() and not sf.testzip():
+                                      (root/'EuropePMC_Armes_Tables_S1_S7.xlsx').write_bytes(sub)
+                                      out['extracted_supplement']={'source':'EuropePMC','name':n,'bytes':len(sub),'sha256':hashlib.sha256(sub).hexdigest(),'sheets':[el.get('name') for el in ET.fromstring(sf.read('xl/workbook.xml')).findall('.//{*}sheet')]}
+                          break
+          # 2: exact conflict BioSample XML, no inference by accession alone
+          for acc in ('SAMN45063136','SAMN45063141'):
+              for kind,url in (
+                  ('ENA_browser','https://www.ebi.ac.uk/ena/browser/api/xml/'+acc),
+                  ('NCBI_eutils','https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?'+urllib.parse.urlencode({'db':'biosample','id':acc,'retmode':'xml'})),
+              ):
+                  item,data=safe_fetch(kind+'_'+acc,url,180000,'.xml','xml')
+                  if data:
+                      try:
+                          tree=ET.fromstring(data)
+                          attrs=[]
+                          for el in tree.iter():
+                              if el.tag.rsplit('}',1)[-1].lower() in ('attribute','sampleattribute'):
+                                  attrs.append({'key':(el.attrib.get('attribute_name') or el.attrib.get('tag') or el.attrib.get('name') or '')[:80],'value':' '.join(el.itertext())[:160]})
+                          item['attributes_first_30']=attrs[:30]
+                          item['linked_ids']=[el.get('accession') for el in tree.iter() if el.get('accession')][:15]
+                      except Exception as e:item['parse_note']=str(e)[:100]
+                  out['sources'].append(item)
+          # 3: MassIVE published small configuration, plus current full list status
+          massive='https://massive.ucsd.edu/ProteoSAFe/'
+          f='f.MSV000096353/ccms_parameters/params.xml'
+          item,data=safe_fetch('MassIVE_params_xml',massive+'DownloadResultFile?'+urllib.parse.urlencode({'file':f,'forceDownload':'true'}),150000,'.xml','xml')
+          if data:
+              s=data.decode('utf8','replace')
+              item['has_experiment2_terms']=bool(re.search(r'PD[0-9]p[0-9]',s,re.I))
+              item['has_replicate_map_terms']=bool(re.search(r'flask|lineage|sample.map|sample_id',s,re.I))
+              item['evidence_text_snippets']=[s[max(0,m.start()-100):m.start()+170].replace('\n',' ') for m in list(re.finditer(r'10Mt0|10Mp0|PD[0-9]p|BioSample|experiment',s,re.I))[:8]]
+          out['sources'].append(item)
+          item,data=safe_fetch('MassIVE_20261026_current_file_directory',massive+'dataset_files.jsp?task=884dc491ce664fec99035f73e8f06e69',220000,'.html',None)
+          # HTML from this official dataset_files.jsp is expected and only this request may accept HTML
+          if item['status']=='FAILED_OR_REJECTED' and item.get('error')=='HTML_NOT_OFFICIAL_SOURCE_BINARY':
+              try:
+                  req=urllib.request.Request(item['url'],headers={'User-Agent':ua})
+                  with urllib.request.urlopen(req,timeout=30) as rsp: raw=rsp.read(220001)
+                  if len(raw)<=220000 and b'dataset_files' in raw[:15000] and b'MSV000096353' in raw:
+                      item.update(status='VALID_OFFICIAL_DIRECTORY_HTML',bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),http=200)
+                      (root/'MassIVE_20261026_current_file_directory.html').write_bytes(raw)
+                      html=raw.decode('utf8','replace')
+                      match=re.search(r'var dataset_files\s*=\s*(\{.*?\});',html,re.S)
+                      if match:
+                          doc=json.loads(match.group(1)); rows=doc.get('row_data',[])
+                          item['total_rows_declared']=doc.get('total_rows')
+                          item['actual_rows']=len(rows)
+                          orig=[r for r in rows if r.get('collection')=='raw']
+                          item['raw_count']=len(orig)
+                          item['raw_exp2_PD_prefix_count']=sum(bool(re.search(r'(?:_|/)PD[0-9]+p[0-9]+',r.get('name',''))) for r in orig)
+                          item['raw_10M_prefix_count']=sum('10M' in r.get('name','') for r in orig)
+              except Exception as e:item['retry_error']=str(e)[:160]
+          out['sources'].append(item)
+          out['NEW_CERTIFIED_PHYSICAL_SENDER_RECEIVER_JOINS']=0
+          out['strict_Q3']='NOT_TESTABLE_UNLESS_OFFICIAL_SAMPLE_DICTIONARY_AND_NUMERIC_MATRICES'
+          out['bit_per_joule']='NOT_IDENTIFIED'
+          (root/'E97_official_source_machine_receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,default=str)+'\n',encoding='utf8')
+          print('E97_RESULT='+json.dumps({k:v for k,v in out.items() if k not in ('media_names',)} ,ensure_ascii=False,default=str)[:29000])
+          PY
+      - name: Archive only bounded public originals and evidence one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e97-official-sample-key-gate
+          path: e97_official/
+          retention-days: 1
+          if-no-files-found: error
