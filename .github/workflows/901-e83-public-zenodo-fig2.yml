@@ -1,0 +1,55 @@
+name: 901 E83 bounded Zenodo Figure2 original source intake
+on:
+  push:
+    branches: ['cloud-public-sources-901-e83-20261026']
+    paths: ['.github/workflows/901-e83-public-zenodo-fig2.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Download one published official XLSX and record bytes and errors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, hashlib, json, os, io, zipfile, urllib.request
+          root=pathlib.Path('e83_public_zenodo_fig2');root.mkdir()
+          url='https://zenodo.org/records/22798201/files/Figure_2_multi_species_three_concentrations_linked%20%282%29.xlsx?download=1'
+          expected_md5='d1f9ac3ceadb1278e0e513c2ea32121a'
+          result={'project':901,'stage':'E83','source_record':'https://zenodo.org/records/22798201','source_version':'v5','source_doi':'10.5281/zenodo.22798201','source_filename':'Figure_2_multi_species_three_concentrations_linked (2).xlsx','expected_md5':expected_md5,'run_id':os.environ.get('GITHUB_RUN_ID'),'status':'NOT_RECEIVED'}
+          try:
+              req=urllib.request.Request(url,headers={'User-Agent':'AcademicSourceIntegrityResearch/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*'})
+              with urllib.request.urlopen(req,timeout=50) as resp:
+                  body=resp.read(1_000_001)
+                  result['http_status']=resp.status
+                  result['response_content_type']=resp.headers.get('Content-Type','')[:80]
+              if len(body)>1_000_000: raise ValueError('BOUND_1MB_EXCEEDED')
+              if not body.startswith(b'PK\\x03\\x04'): raise ValueError('INVALID_XLSX_ZIP_SIGNATURE')
+              md5=hashlib.md5(body).hexdigest()
+              result['actual_md5']=md5
+              if md5!=expected_md5: raise ValueError('OFFICIAL_MD5_MISMATCH')
+              with zipfile.ZipFile(io.BytesIO(body)) as z:
+                  items=z.infolist()
+                  if len(items)>650 or sum(x.file_size for x in items)>60_000_000:raise ValueError('ZIP_BOMB_GUARD')
+                  if z.testzip() is not None:raise ValueError('ZIP_CRC_FAILURE')
+                  names=z.namelist()
+                  if not {'[Content_Types].xml','xl/workbook.xml'}.issubset(names):raise ValueError('NOT_XLSX_PACKAGE')
+                  if any('..' in item.filename.split('/') or item.filename.startswith('/') for item in items):raise ValueError('UNSAFE_ZIP_PATH')
+                  if any(x.filename.endswith('vbaProject.bin') for x in items):raise ValueError('MACRO_NOT_ALLOWED')
+              fname='901_E83_Zenodo_v5_Figure2_original.xlsx'
+              (root/fname).write_bytes(body)
+              result.update(status='PASS_OFFICIAL_MD5_CRC',sha256=hashlib.sha256(body).hexdigest(),bytes=len(body),zip_members=len(items),stored_name=fname)
+          except Exception as e:
+              result.update(status='REJECTED_OR_BLOCKED',error_type=type(e).__name__,error=str(e)[:240])
+          (root/'E83_source_intake_receipt.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\\n',encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False))
+          PY
+      - name: Upload bounded public source and receipt for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e83-zenodo-figure2-original
+          path: e83_public_zenodo_fig2/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
