@@ -1,0 +1,53 @@
+name: 901 E88 bounded University of Leeds published workbook
+on:
+  push:
+    branches: ['cloud-public-sources-901-e88-20261026']
+    paths: ['.github/workflows/901-e88-leeds-raw-source.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Bounded retrieval of one published open research workbook
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, json, hashlib, io, urllib.request, zipfile
+          out=pathlib.Path('e88_leeds_source');out.mkdir()
+          url='https://archive.researchdata.leeds.ac.uk/1103/5/Experimental_data.xlsx'
+          rec={'project':901,'stage':'E88','dataset_doi':'10.5518/1341','source_url':url,'operation':'public published workbook intake only','run_id':os.environ.get('GITHUB_RUN_ID'),'status':'NOT_RECEIVED'}
+          try:
+              req=urllib.request.Request(url,headers={'User-Agent':'PublishedAcademicResearchIntegrity/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*'})
+              with urllib.request.urlopen(req,timeout=40) as resp:
+                  body=resp.read(900001)
+                  rec['http_status']=resp.status
+                  rec['content_type']=resp.headers.get('Content-Type','')[:120]
+                  rec['final_url']=resp.url
+              rec['bytes_received']=len(body)
+              rec['file_prefix_hex']=body[:16].hex()
+              if len(body)>900000:raise ValueError('BOUND_900KB_EXCEEDED')
+              if not body.startswith(bytes([80,75,3,4])):raise ValueError('NOT_XLSX_ZIP')
+              with zipfile.ZipFile(io.BytesIO(body)) as z:
+                  members=z.infolist()
+                  if len(members)>600 or sum(x.file_size for x in members)>25_000_000:raise ValueError('ZIP_BOMB_BOUNDS')
+                  if z.testzip() is not None:raise ValueError('ZIP_CRC_FAIL')
+                  names=set(z.namelist())
+                  if not {'[Content_Types].xml','xl/workbook.xml'}.issubset(names):raise ValueError('NOT_OFFICE_XLSX')
+                  if any('..' in x.filename.split('/') or x.filename.startswith('/') for x in members):raise ValueError('UNSAFE_ZIP_PATH')
+                  if any(x.filename.endswith('vbaProject.bin') for x in members):raise ValueError('MACROS_NOT_ALLOWED')
+              name='Li2023_Leeds_Experimental_data_official.xlsx'
+              (out/name).write_bytes(body)
+              rec.update(status='PASS_PUBLIC_ORIGINAL_ZIP_CRC',bytes=len(body),sha256=hashlib.sha256(body).hexdigest(),md5=hashlib.md5(body).hexdigest(),zip_member_count=len(members),filename=name)
+          except Exception as e:
+              rec.update(status='REJECTED_OR_BLOCKED',exception=type(e).__name__,error=str(e)[:240])
+          (out/'E88_leeds_source_receipt.json').write_text(json.dumps(rec,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print(json.dumps(rec,ensure_ascii=False))
+          PY
+      - name: Store published one-file research source and receipt for 1 day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e88-leeds-public-original
+          path: e88_leeds_source/
+          retention-days: 1
+          if-no-files-found: error
