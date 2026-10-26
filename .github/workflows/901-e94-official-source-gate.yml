@@ -1,0 +1,88 @@
+name: 901 E94 limited official natural QS attachment index
+on:
+  push:
+    branches: ['cloud-public-sources-901-e94-20261026']
+    paths: ['.github/workflows/901-e94-official-source-gate.yml']
+permissions: {}
+jobs:
+  meta:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Read three public scholarly XML source records, inspect data links only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,xml.etree.ElementTree as ET,hashlib,json,os,re
+          d=pathlib.Path('e94_published_xml');d.mkdir()
+          refs=[
+            ('HE2024_RsaL','PMC11139201','10.1002/mlf2.12113'),
+            ('SCHOLZ2017_positive_autoregulation','PMC5527315','10.1128/mbio.01079-17'),
+            ('CRUZ2020_CF_RhlR','PMC7157775','10.1128/mbio.00532-20')
+          ]
+          run={'project':901,'stage':'E94','run_id':os.getenv('GITHUB_RUN_ID'),'scope':'3 official EuropePMC fullTextXML; no experimental attachments or personal data','items':[]}
+          def tag(x):return x.tag.rsplit('}',1)[-1]
+          def compact(s):return ' '.join(s.split())
+          for name,pmc,doi in refs:
+            item={'name':name,'pmcid':pmc,'doi':doi,'status':'NOT_RECEIVED','raw_measurement_bytes':0}
+            try:
+              url='https://www.ebi.ac.uk/europepmc/webservices/rest/'+pmc+'/fullTextXML'
+              req=urllib.request.Request(url,headers={'User-Agent':'NoncommercialOpenScientificProvenance/1.0','Accept':'application/xml, text/xml'})
+              with urllib.request.urlopen(req,timeout=40) as resp:
+                raw=resp.read(1200001)
+                item['http_status']=resp.status
+                item['content_type']=(resp.headers.get('Content-Type') or '')[:100]
+              item['received_bytes']=len(raw)
+              if len(raw)>1200000:raise ValueError('OFFICIAL_XML_1_2MB_BOUND')
+              if raw.lstrip()[:15].lower().startswith(b'<!doctype html'):raise ValueError('HTML_CHALLENGE_NOT_XML')
+              tree=ET.fromstring(raw)
+              if tag(tree)!='article':raise ValueError('NOT_NLM_ARTICLE_XML')
+              title_elements=[x for x in tree.iter() if tag(x)=='article-title']
+              title=compact(''.join(title_elements[0].itertext()))[:260] if title_elements else ''
+              if not title:raise ValueError('NO_ARTICLE_TITLE')
+              item['article_title']=title
+              item['n_supplementary_index']=0
+              supp=[]
+              for el in tree.iter():
+                if tag(el)!='supplementary-material':continue
+                attrs=[]
+                for sub in el.iter():
+                  for k,v in sub.attrib.items():
+                    if 'href' in k.lower() or 'mime' in k.lower():attrs.append([k,str(v)[:180]])
+                cap_el=next((sub for sub in el.iter() if tag(sub)=='caption'),None)
+                label=compact(''.join(cap_el.itertext()))[:200] if cap_el is not None else ''
+                supp.append({'id':el.get('id'),'label':label,'files':attrs[:8]})
+              availability=[]
+              for el in tree.iter():
+                if (tag(el)=='sec' and el.get('sec-type') in ('data-availability','availability')) or (tag(el)=='notes' and el.get('notes-type')=='data-availability'):
+                  availability.append(compact(''.join(el.itertext()))[:1100])
+              paragraphs=[]
+              for el in tree.iter():
+                if tag(el)!='p':continue
+                v=compact(''.join(el.itertext()))
+                low=v.lower()
+                if ('ahl' in low or '3oc12' in low or 'rhlr' in low) and ('culture' in low or 'replicate' in low or 'lac' in low or 'bioassay' in low):
+                  paragraphs.append(v[:700])
+              item['supplements']=supp[:35]
+              item['n_supplementary_index']=len(supp)
+              item['availability']=availability[:3]
+              item['selected_methods_paragraphs']=paragraphs[:9]
+              item['sha256']=hashlib.sha256(raw).hexdigest()
+              item['md5']=hashlib.md5(raw).hexdigest()
+              (d/(name+'_official_fulltext.xml')).write_bytes(raw)
+              item['status']='PASS_PUBLISHED_OFFICIAL_XML_WITH_SOURCELIST'
+            except Exception as e:
+              item['status']='REJECTED_OR_BLOCKED'
+              item['error_type']=type(e).__name__
+              item['error']=str(e)[:210]
+            run['items'].append(item)
+          (d/'E94_official_three_source_attachment_manifest.json').write_text(json.dumps(run,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print(json.dumps([{'name':x['name'],'status':x['status'],'bytes':x.get('received_bytes'),'supplement_count':x.get('n_supplementary_index'),'availability':x.get('availability'),'supplement_names':[z.get('files') for z in x.get('supplements',[])[:10]]} for x in run['items']],ensure_ascii=False))
+          PY
+      - name: Keep bounded official XML and evidence manifest for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e94-published-qs-metadata
+          path: e94_published_xml/
+          retention-days: 1
+          if-no-files-found: error
