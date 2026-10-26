@@ -1,0 +1,89 @@
+name: 901 E100 Johnson Fig4A-B 21 source arrays independent QC
+on:
+  push:
+    branches: ['cloud-public-sources-901-e100-20261026']
+    paths: ['.github/workflows/901-e100-johnson-Fig4AB-fixed.yml']
+permissions: {}
+jobs:
+  e100:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Read exactly one NIH S1 official xlsx and verify frozen 7 groups
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,zipfile,io,json,hashlib,csv,re,urllib.request,urllib.parse
+          import xml.etree.ElementTree as ET
+          from decimal import Decimal,localcontext
+          root=pathlib.Path('e100_results');root.mkdir()
+          url='https://pmc-oa-opendata.s3.amazonaws.com/PMC12121927.1/pbio.3003187.s001.xlsx?md5=a2d4c3d10208cae008a73487daf97464'
+          q={'stage':'901_E100','DOI':'10.1371/journal.pbio.3003187','scope':'ONLY NIH S1 Fig4A/B corrected rows 4..7 and 12..14, A/I cells, no inferential testing','url':url}
+          req=urllib.request.Request(url,headers={'User-Agent':'Noncommercial Source Reproducibility/1.0'})
+          with urllib.request.urlopen(req,timeout=45) as resp:
+              assert urllib.parse.urlsplit(resp.url).hostname=='pmc-oa-opendata.s3.amazonaws.com'
+              assert not resp.headers.get('Content-Length') or int(resp.headers['Content-Length'])<=3200000
+              blob=resp.read(3200001)
+              q['http_status']=resp.status
+          assert len(blob)==2090177 and len(blob)<3200001 and blob.startswith(b'PK\x03\x04')
+          assert hashlib.md5(blob).hexdigest()=='a2d4c3d10208cae008a73487daf97464'
+          assert hashlib.sha256(blob).hexdigest()=='57471a97a7f826c3c689c6e3927e02827de3e392798b70be898bf946be51c113'
+          q.update(bytes=len(blob),md5=hashlib.md5(blob).hexdigest(),sha256=hashlib.sha256(blob).hexdigest())
+          with zipfile.ZipFile(io.BytesIO(blob)) as z:
+              assert z.testzip() is None
+              rootss=ET.fromstring(z.read('xl/sharedStrings.xml'))
+              ss=[''.join(t.text or '' for t in x.iter() if t.tag.endswith('}t')) for x in rootss if x.tag.endswith('}si')]
+              sheet=ET.fromstring(z.read('xl/worksheets/sheet18.xml'))
+              target={4,5,6,7,12,13,14}
+              byrow={}
+              for row in sheet.iter():
+                  if not row.tag.endswith('}row'):continue
+                  number=int(row.get('r','0'))
+                  if number not in target:continue
+                  data={}
+                  for c in row:
+                      if not c.tag.endswith('}c'):continue
+                      ref=c.get('r','')
+                      if not re.fullmatch(r'[A-I]'+str(number),ref):continue
+                      v=next((v.text for v in c if v.tag.endswith('}v')),None)
+                      if c.get('t')=='s' and v is not None:v=ss[int(v)]
+                      if v is not None:data[ref.rstrip('0123456789')]=v
+                  byrow[number]=data
+          results=[]
+          ln2=Decimal(2).ln()
+          with localcontext() as ctx:
+              ctx.prec=50
+              for row in sorted(target):
+                  cells=byrow[row]
+                  for metric,original,mean,sd in [('volume','A','B','C'),('hapR','D','E','F'),('qrr','G','H','I')]:
+                      vals=[Decimal(v.strip()) for v in cells[original].split(',')]
+                      assert vals and all(x>0 for x in vals)
+                      n=Decimal(len(vals))
+                      geometric=(sum(v.ln() for v in vals)/n).exp()
+                      logs=[v.ln()/ln2 for v in vals]
+                      lm=sum(logs)/n
+                      sdp=(sum((v-lm)**2 for v in logs)/n).sqrt()
+                      authorm=Decimal(cells[mean]);authors=Decimal(cells[sd])
+                      results.append({'condition':'WT' if row<=7 else 'LCD-locked','source_row':row,'metric':metric,'raw_numeric_n':len(vals),'reported_geometric_mean':str(authorm),'recomputed_geometric_mean':str(geometric),'mean_error':str(abs(geometric-authorm)),'reported_log2_population_SD':str(authors),'recomputed_log2_population_SD':str(sdp),'SD_error':str(abs(sdp-authors)),'source_ref':'S1 XLSX sheet18 '+original+str(row)})
+          groups=[]
+          for row in sorted(target):
+              arr=[x for x in results if x['source_row']==row]
+              counts={r['metric']:r['raw_numeric_n'] for r in arr}
+              groups.append({'row':row,'condition':'WT' if row<=7 else 'LCD-locked','volume_n':counts['volume'],'hapR_n':counts['hapR'],'qrr_n':counts['qrr'],'count_discrepancy':len(set(counts.values()))!=1})
+          q.update(n_source_groups=len(groups),n_metric_sets=len(results),n_numeric=sum(x['raw_numeric_n'] for x in results),group_counts=groups,max_mean_error=str(max(Decimal(x['mean_error']) for x in results)),max_SD_error=str(max(Decimal(x['SD_error']) for x in results)),id_note='Ordinal position in Excel comma lists does not certify same physical biofilm across different metrics.',biofilm_parent_dates='NOT_PROVIDED',q3='NOT_TESTABLE',bit_per_joule='NOT_IDENTIFIED')
+          assert len(groups)==7 and len(results)==21 and q['n_numeric']==206
+          assert [(g['volume_n'],g['hapR_n'],g['qrr_n']) for g in groups]==[(10,10,10),(10,10,9),(10,10,10),(10,10,10),(10,10,10),(9,9,9),(10,10,10)]
+          assert max(Decimal(x['mean_error']) for x in results)<Decimal('1E-9')
+          assert max(Decimal(x['SD_error']) for x in results)<Decimal('1E-12')
+          with (root/'E100_21_source_arrays_recomputation.csv').open('w',newline='',encoding='utf8') as f:
+              w=csv.DictWriter(f,fieldnames=list(results[0]));w.writeheader();w.writerows(results)
+          (root/'E100_NIH_7groups_206_source_QC.json').write_text(json.dumps(q,ensure_ascii=False,indent=2)+'\n')
+          print('E100_QC_RESULT='+json.dumps({'run':q['stage'],'source_sha256':q['sha256'],'n_source_groups':q['n_source_groups'],'n_metric_sets':q['n_metric_sets'],'n_numeric':q['n_numeric'],'group_counts':groups,'max_mean_error':q['max_mean_error'],'max_SD_error':q['max_SD_error'],'result':'PASS'},ensure_ascii=False))
+          PY
+      - name: Archive only tiny source-QC, no duplicate publisher workbook
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e100-johnson-fig4AB-verified-QC
+          path: e100_results/
+          retention-days: 1
+          if-no-files-found: error
