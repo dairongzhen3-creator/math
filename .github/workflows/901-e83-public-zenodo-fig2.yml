@@ -24,8 +24,11 @@ jobs:
                   body=resp.read(1_000_001)
                   result['http_status']=resp.status
                   result['response_content_type']=resp.headers.get('Content-Type','')[:80]
+              result['received_bytes']=len(body)
+              result['prefix_hex']=body[:16].hex()
+              result['actual_md5']=hashlib.md5(body).hexdigest()
               if len(body)>1_000_000: raise ValueError('BOUND_1MB_EXCEEDED')
-              if not body.startswith(b'PK\\x03\\x04'): raise ValueError('INVALID_XLSX_ZIP_SIGNATURE')
+              if not body.startswith(bytes([80,75,3,4])): raise ValueError('INVALID_XLSX_ZIP_SIGNATURE')
               md5=hashlib.md5(body).hexdigest()
               result['actual_md5']=md5
               if md5!=expected_md5: raise ValueError('OFFICIAL_MD5_MISMATCH')
