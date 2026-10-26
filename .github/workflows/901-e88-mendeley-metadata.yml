@@ -1,0 +1,65 @@
+name: 901 E88 bounded public Mendeley metadata only
+on:
+  push:
+    branches: ['cloud-public-sources-901-e88-20261026']
+    paths: ['.github/workflows/901-e88-mendeley-metadata.yml']
+permissions: {}
+jobs:
+  public-metadata:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Read only three official public metadata endpoints, no file downloads
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib,urllib.request,urllib.error
+          base='https://api.data.mendeley.com/datasets/'
+          sid='cd3mbk5c6p'
+          paths=[''+sid+'?version=1',sid+'/files?version=1','publics/'+sid+'/files?version=1']
+          records=[]
+          out=pathlib.Path('e88_mendeley_public_metadata');out.mkdir()
+          for ix,p in enumerate(paths):
+              u=base+p
+              rec={'endpoint':u,'status':'UNTESTED','http_status':None}
+              try:
+                  req=urllib.request.Request(u,headers={'User-Agent':'AcademicProvenanceInventory/1.0','Accept':'application/vnd.mendeley-public-dataset.1+json,application/json'})
+                  with urllib.request.urlopen(req,timeout=22) as resp:
+                      raw=resp.read(150_001)
+                      rec['http_status']=resp.status
+                      rec['content_type']=resp.headers.get('Content-Type','')[:120]
+                      rec['received_bytes']=len(raw)
+                  if len(raw)>150000:raise ValueError('METADATA_SIZE_BOUND')
+                  obj=json.loads(raw)
+                  rec['status']='PASS_JSON'
+                  rec['json_type']=type(obj).__name__
+                  if isinstance(obj,dict):
+                      rec['name']=str(obj.get('name',''))[:200]
+                      rec['version']=obj.get('version')
+                      rec['keys']=sorted(obj.keys())[:35]
+                      files=obj.get('files',[])
+                  elif isinstance(obj,list):files=obj
+                  else:files=[]
+                  if isinstance(files,list):
+                      rec['file_count']=len(files)
+                      rec['files']=[{'filename':str(f.get('filename') or f.get('name',''))[:180],
+                                     'id':str(f.get('id',''))[:100],
+                                     'size':f.get('size') or (f.get('content_details') or {}).get('size'),
+                                     'sha256_hash':(f.get('content_details') or {}).get('sha256_hash')} for f in files[:70] if isinstance(f,dict)]
+                  (out/('response_'+str(ix)+'.json')).write_text(json.dumps(obj,ensure_ascii=False,indent=2)[:145000]+'\n',encoding='utf8')
+              except urllib.error.HTTPError as e:
+                  rec.update(status='HTTP_ERROR',http_status=e.code,reason=str(e.reason)[:100])
+              except Exception as e:
+                  rec.update(status='REJECTED_OR_BLOCKED',error_type=type(e).__name__,error=str(e)[:180])
+              records.append(rec)
+          receipt={'project':901,'stage':'E88','operation':'Mendeley public dataset metadata ONLY, no original measurement bytes','run_id':os.environ.get('GITHUB_RUN_ID'),'records':records}
+          (out/'E88_mendeley_metadata_receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print(json.dumps(receipt,ensure_ascii=False))
+          PY
+      - name: Save public metadata and execution receipt temporarily
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e88-mendeley-official-metadata
+          path: e88_mendeley_public_metadata/
+          retention-days: 1
+          if-no-files-found: error
