@@ -1,0 +1,56 @@
+name: 901 E87 bounded Dryad cell density XLSX intake
+on:
+  push:
+    branches: ['cloud-public-sources-901-e87-20261026']
+    paths: ['.github/workflows/901-e87-dryad-cell-density.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch one public official Dryad Zenodo mirrored workbook with bounded validation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, urllib.request, hashlib, io, zipfile, json
+          p=pathlib.Path('e87_dryad_public');p.mkdir()
+          url='https://zenodo.org/records/7958556/files/cell_density_data_dryad.xlsx?download=1'
+          expected='cfad180d64650c0452429af6295dbd2f'
+          r={'project':901,'stage':'E87','doi':'10.5061/dryad.6t1g1jx32','mirrored_record':'https://zenodo.org/records/7958556','source_url':url,'expected_md5':expected,'run_id':os.environ.get('GITHUB_RUN_ID'),'status':'NOT_RECEIVED'}
+          try:
+              req=urllib.request.Request(url,headers={'User-Agent':'PublicAcademicDataIntegrity/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*'})
+              with urllib.request.urlopen(req,timeout=35) as resp:
+                  raw=resp.read(262145)
+                  r['http_status']=resp.status
+                  r['final_url']=resp.url
+                  r['content_type']=resp.headers.get('Content-Type')
+              r['received_bytes']=len(raw)
+              r['prefix_hex']=raw[:16].hex()
+              r['actual_md5']=hashlib.md5(raw).hexdigest()
+              if len(raw)>262144: raise ValueError('MAX_256K_EXCEEDED')
+              if r['actual_md5']!=expected: raise ValueError('OFFICIAL_MD5_MISMATCH')
+              if not raw.startswith(bytes([80,75,3,4])):raise ValueError('INVALID_XLSX_SIGNATURE')
+              with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                  info=z.infolist()
+                  if len(info)>350 or sum(x.file_size for x in info)>8000000:raise ValueError('UNCOMPRESSED_LIMIT')
+                  if z.testzip() is not None:raise ValueError('ZIP_CRC_FAIL')
+                  names=set(z.namelist())
+                  if not {'[Content_Types].xml','xl/workbook.xml'}.issubset(names):raise ValueError('NOT_XLSX')
+                  if any('..' in x.filename.split('/') or x.filename.startswith('/') for x in info):raise ValueError('UNSAFE_PATH')
+                  if any(x.filename.lower().endswith('vbaproject.bin') for x in info):raise ValueError('MACROS_REJECT')
+              filename='García-Diéguez2023_Dryad_cell_density_official.xlsx'
+              (p/filename).write_bytes(raw)
+              r.update(status='PASS_OFFICIAL_MD5_CRC',bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),zip_members=len(info),file_name=filename)
+          except Exception as e:
+              r.update(status='REJECTED_OR_BLOCKED',error_type=type(e).__name__,error=str(e)[:240])
+          (p/'E87_transport_receipt.json').write_text(json.dumps(r,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
+          print(json.dumps(r,ensure_ascii=False))
+          PY
+      - name: Preserve source and explicit receipt for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e87-dryad-density-original
+          path: e87_dryad_public/
+          retention-days: 1
+          if-no-files-found: error
