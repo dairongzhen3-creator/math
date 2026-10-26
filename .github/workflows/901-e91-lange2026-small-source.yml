@@ -1,0 +1,77 @@
+name: 901 E91 bounded Lange2026 natural QS source small-file intake
+on:
+  push:
+    branches: ['cloud-public-sources-901-e91-20261026']
+    paths: ['.github/workflows/901-e91-lange2026-small-source.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch exactly 4 published small source files with Figshare hashes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib,io,zipfile,json,csv,urllib.request,os,pathlib,stat
+          files=[
+          ('figure_source_file_and_script_index.xlsx',60001994,10324,'23ba3609fb7381fc715a14434699508a'),
+          ('frequencies.csv',60002060,211933,'00cc7bd634b9b492876559e18a624936'),
+          ('statistics_summary.csv',60002057,250317,'5e37eabef9762fda6a7ecd80e3994772'),
+          ('standardized_residuals.csv',60002066,117732,''),
+          ]
+          # Metadata for fourth item is retrieved from official bounded API, never substitute an invented MD5.
+          article_url='https://api.figshare.com/v2/articles/30752288'
+          folder=pathlib.Path('e91_lange2026_small_sources');folder.mkdir()
+          report={'project':901,'stage':'E91','paper_doi':'10.1038/s41467-026-71109-4','dataset_doi':'10.6084/m9.figshare.30752288','run_id':os.environ.get('GITHUB_RUN_ID'),'status':'NOT_RECEIVED','items':[]}
+          try:
+              with urllib.request.urlopen(urllib.request.Request(article_url,headers={'Accept':'application/json','User-Agent':'AcademicPublishedSource/1.0'}),timeout=25) as resp:
+                  md=resp.read(200001)
+              if len(md)>200000:raise ValueError('METADATA_BOUND')
+              obj=json.loads(md)
+              index={str(f['id']):f for f in obj['files']}
+              for filename,fid,expected_size,exp_md5 in files:
+                  r={'filename':filename,'file_id':fid,'status':'NOT_RECEIVED'}
+                  try:
+                      f=index.get(str(fid))
+                      if not f or f['name']!=filename or f['size']!=expected_size:raise ValueError('FILE_METADATA_MISMATCH')
+                      pub_md5=f.get('computed_md5') or f.get('supplied_md5')
+                      if not pub_md5 or exp_md5 and pub_md5!=exp_md5:raise ValueError('MD5_METADATA_MISMATCH')
+                      url='https://ndownloader.figshare.com/files/'+str(fid)
+                      with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'AcademicPublishedSource/1.0'}),timeout=45) as resp:
+                          raw=resp.read(expected_size+1)
+                          r['http_status']=resp.status
+                      r.update(bytes=len(raw),actual_md5=hashlib.md5(raw).hexdigest(),official_md5=pub_md5,source_url=url)
+                      if len(raw)!=expected_size or r['actual_md5']!=pub_md5:raise ValueError('SOURCE_MD5_OR_SIZE_MISMATCH')
+                      if filename.endswith('.xlsx'):
+                          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                              if z.testzip() is not None:raise ValueError('XLSX_CRC_FAILED')
+                              items=z.infolist()
+                              if len(items)>80 or sum(x.file_size for x in items)>3000000:raise ValueError('XLSX_BOUND')
+                              if not {'[Content_Types].xml','xl/workbook.xml'}.issubset(z.namelist()):raise ValueError('NOT_OOXML')
+                              if any('..' in x.filename.split('/') or x.filename.startswith('/') for x in items):raise ValueError('BAD_ZIP_MEMBER')
+                      else:
+                          txt=raw.decode('utf-8-sig')
+                          reader=csv.reader(io.StringIO(txt))
+                          header=next(reader)
+                          row_count=sum(1 for _ in reader)
+                          if not header or row_count<1:raise ValueError('CSV_EMPTY')
+                          r.update(csv_header=header[:45],rows=row_count)
+                      (folder/filename).write_bytes(raw)
+                      r.update(status='PASS_OFFICIAL_MD5',sha256=hashlib.sha256(raw).hexdigest())
+                  except Exception as e:
+                      r.update(status='REJECTED_OR_BLOCKED',error_type=type(e).__name__,error=str(e)[:200])
+                  report['items'].append(r)
+              report['status']='PASS_4_OF_4' if sum(x['status']=='PASS_OFFICIAL_MD5' for x in report['items'])==4 else 'PARTIAL_OR_BLOCKED'
+          except Exception as e:
+              report.update(status='METADATA_ERROR',error_type=type(e).__name__,error=str(e)[:160])
+          (folder/'E91_small_source_receipt.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print(json.dumps(report,ensure_ascii=False))
+          PY
+      - name: Upload only bounded public source files and explicit receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e91-lange2026-verified-small-sources
+          path: e91_lange2026_small_sources/
+          retention-days: 1
+          if-no-files-found: error
