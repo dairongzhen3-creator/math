@@ -1,0 +1,115 @@
+name: 901 E98 bounded official per-BioSample analysis provenance gate
+on:
+  push:
+    branches: ['cloud-public-sources-901-e98-20261026']
+    paths: ['.github/workflows/901-e98-per-sample-abundance-source-gate.yml']
+permissions: {}
+jobs:
+  official-metadata:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Check public ENA submission-level sample attributes and processed analysis presence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,urllib.request,urllib.parse,urllib.error,xml.etree.ElementTree as ET,hashlib,json,csv,io,pathlib,re,collections,concurrent.futures
+          d=pathlib.Path('e98_public_machine_metadata');d.mkdir()
+          out={'project':901,'stage':'E98','run_id':os.getenv('GITHUB_RUN_ID'),'scope':'Public ENA PRJNA1190957 metadata only, no FASTQ/MS raw, no author contact','sources':[]}
+          ua='NoncommercialScientificProvenance/1.0 E98 narrow public metadata review'
+          def get(label,url,cap,valid_xml=False):
+              item={'name':label,'url':url,'status':'NOT_RECEIVED'}
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'text/plain, text/xml, application/xml'})
+                  with urllib.request.urlopen(req,timeout=22) as res:
+                      blob=res.read(cap+1)
+                      item['http']=res.status
+                      item['mime']=(res.headers.get('Content-Type') or '')[:100]
+                  if len(blob)>cap:raise ValueError('BYTE_BOUND_EXCEEDED')
+                  if len(blob)<10:raise ValueError('EMPTY')
+                  if blob[:500].lstrip().lower().startswith((b'<html',b'<!doctype html')):raise ValueError('HTML_NOT_SOURCE')
+                  if valid_xml:ET.fromstring(blob)
+                  item.update(status='RECEIVED_BOUNDED',bytes=len(blob),sha256=hashlib.sha256(blob).hexdigest())
+                  (d/(label+'.'+('xml' if valid_xml else 'tsv'))).write_bytes(blob)
+                  return item,blob
+              except Exception as e:
+                  item.update(status='SOURCE_FAILED',error_type=type(e).__name__,error=str(e)[:210])
+                  return item,None
+          # Existing E96 accession list, official ENA five-column run-level table
+          portal='https://www.ebi.ac.uk/ena/portal/api/filereport'
+          runfields='run_accession,sample_accession,experiment_accession,library_name,sample_title'
+          u=portal+'?'+urllib.parse.urlencode({'accession':'PRJNA1190957','result':'read_run','fields':runfields,'format':'tsv'})
+          it,runbytes=get('E98_ENA_reference_run_sample_mapping',u,350000)
+          if runbytes:
+              rows=list(csv.DictReader(io.StringIO(runbytes.decode('utf-8-sig','replace')),delimiter='\t'))
+              if len(rows)!=82:it['warning_expected_82_actual']=len(rows)
+              accessions=sorted({x.get('sample_accession','') for x in rows if x.get('sample_accession','').startswith('SAMN')})
+              it.update(run_records=len(rows),unique_biosamples=len(accessions),unique_runs=len({x.get('run_accession') for x in rows}))
+          else:accessions=[]
+          out['sources'].append(it)
+          # Official ENA analysis-type indexed objects associated with BioProject (not sequencing FASTQ)
+          for n,params in [
+              ('ENA_analysis_filereport',{'accession':'PRJNA1190957','result':'analysis','format':'tsv'}),
+              ('ENA_assembly_filereport',{'accession':'PRJNA1190957','result':'assembly','format':'tsv'}),
+          ]:
+              item,data=get(n,portal+'?'+urllib.parse.urlencode(params),320000)
+              if data:
+                  txt=data.decode('utf-8-sig','replace')
+                  item.update(line_count=len([s for s in txt.splitlines() if s.strip()]),first_lines=txt.splitlines()[:3])
+              out['sources'].append(item)
+          # Browse all 81 public BioSamples for available attribute keys; one request per accession
+          samples=[];raw_records=[];fail=[]
+          def one(acc):
+              u='https://www.ebi.ac.uk/ena/browser/api/xml/'+urllib.parse.quote(acc)
+              try:
+                  req=urllib.request.Request(u,headers={'User-Agent':ua,'Accept':'application/xml'})
+                  with urllib.request.urlopen(req,timeout=20) as res:b=res.read(30001)
+                  if len(b)>30000 or b'<SAMPLE_SET' not in b[:300]:raise ValueError('SAMPLE_XML_INVALID')
+                  tree=ET.fromstring(b)
+                  smpl=next((x for x in tree.iter() if x.tag.rsplit('}',1)[-1]=='SAMPLE'),None)
+                  attrs=[]
+                  if smpl is not None:
+                      for x in smpl.iter():
+                          if x.tag.rsplit('}',1)[-1]=='SAMPLE_ATTRIBUTE':
+                              tag=next((v.text or '' for v in x if v.tag.rsplit('}',1)[-1]=='TAG'), '')
+                              val=next((v.text or '' for v in x if v.tag.rsplit('}',1)[-1]=='VALUE'), '')
+                              attrs.append([tag,val])
+                  return {'sample_accession':acc,'status':'PASS','bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'attributes':attrs,'xml_bytes':b}
+              except Exception as e:return {'sample_accession':acc,'status':'FAILED','error':type(e).__name__+': '+str(e)[:150]}
+          if accessions:
+              with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+                  for x in pool.map(one,accessions):
+                      if x['status']=='PASS':
+                          raw_records.append(x.pop('xml_bytes'))
+                          samples.append(x)
+                      else:fail.append(x)
+          attrnames=collections.Counter()
+          attrvalues=collections.defaultdict(set)
+          for x in samples:
+              for k,v in x['attributes']:
+                  attrnames[k]+=1
+                  if len(attrvalues[k])<18:attrvalues[k].add(v)
+          summary={'source':'ENA_browser_individual_public_BioSample_XML','requested':len(accessions),'received':len(samples),'failed':len(fail),'attributes_found':dict(attrnames),'attribute_examples':{k:sorted(list(v))[:8] for k,v in attrvalues.items()},'failed_sample_records':fail[:15]}
+          # No raw FASTQ, no reads, and no source identity rewriting
+          (d/'E98_ENA_BioSample_attribute_summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n')
+          (d/'E98_ENA_per_BioSample_attribute_rows.json').write_text(json.dumps(samples,ensure_ascii=False,indent=2)+'\n')
+          out['sample_source_audit']=summary
+          # Read-only hint only, never certification via substring: list recognized parent and lineage fields
+          probable=['parent_culture_id','flask_id','culture_vessel_id','serial_transfer_lineage_id','lcms_sample_id','ms_sample_id','physical_experiment_date','per_sample_taxon_counts','biom_table','feature_table']
+          normalized={k.lower().replace('-','_').replace(' ','_') for k in attrnames}
+          out['explicit_physical_parent_field_names_found']=[s for s in probable if s.lower() in normalized]
+          out['author_certified_cross_repository_sample_map']='NOT_FOUND_IN_CHECKED_OFFICIAL_METADATA'
+          out['sample_by_10_taxa_matrix']='NOT_RETRIEVED'
+          out['natural_sender_receiver_joint_distribution']='NOT_IDENTIFIED'
+          out['independent_experiment_Q3']='NOT_TESTABLE'
+          out['bit_per_joule']='NOT_IDENTIFIED'
+          (d/'E98_official_source_receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+          print('E98_MACHINE_RESULT='+json.dumps({'sources':out['sources'],'sample_source_audit':summary,'explicit_physical_parent_field_names_found':out['explicit_physical_parent_field_names_found'],'author_certified_cross_repository_sample_map':out['author_certified_cross_repository_sample_map'],'sample_by_10_taxa_matrix':out['sample_by_10_taxa_matrix']},ensure_ascii=False)[:24000])
+          PY
+      - name: Keep tiny official metadata and audit report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e98-public-biosample-and-analysis-metadata
+          path: e98_public_machine_metadata/
+          retention-days: 1
+          if-no-files-found: error
