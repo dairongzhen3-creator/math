@@ -1,0 +1,43 @@
+name: 901 E89 bounded public Leeds README provenance
+on:
+  push:
+    branches: ['cloud-public-sources-901-e89-20261026']
+    paths: ['.github/workflows/901-e89-leeds-readme-only.yml']
+permissions: {}
+jobs:
+  public-readme:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 4
+    steps:
+      - name: Read official public plain-text README only with bounded response and source SHA
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json,pathlib,urllib.request,hashlib
+          folder=pathlib.Path('e89_leeds_official_readme');folder.mkdir()
+          url='https://archive.researchdata.leeds.ac.uk/1103/3/README_Li-etal_2023.txt'
+          receipt={'project':901,'stage':'E89','source_url':url,'public_dataset_doi':'10.5518/1341','status':'NOT_RECEIVED','github_run_id':os.getenv('GITHUB_RUN_ID')}
+          try:
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'AcademicSourceReadmeIntegrity/1.0','Accept':'text/plain,*/*'}),timeout=25) as resp:
+                  body=resp.read(16385)
+                  receipt['http_status']=resp.status
+                  receipt['content_type']=(resp.headers.get('Content-Type') or '')[:90]
+              if len(body)>16384:raise ValueError('TEXT_16K_LIMIT')
+              text=body.decode('utf-8-sig')
+              if 'Experimental_data.xlsx' not in text or 'Plasmid_sequences.xlsx' not in text or '10.5518/1341' not in text:
+                  raise ValueError('REQUIRED_DOC_FIELDS_NOT_PRESENT')
+              filename='README_Li-etal_2023_official.txt'
+              (folder/filename).write_bytes(body)
+              receipt.update(status='PASS_OFFICIAL_TEXT_FORMAT',bytes=len(body),sha256=hashlib.sha256(body).hexdigest(),md5=hashlib.md5(body).hexdigest(),filename=filename)
+          except Exception as e:
+              receipt.update(status='REJECTED_OR_BLOCKED',error_type=type(e).__name__,error=str(e)[:220])
+          (folder/'E89_readme_transport_receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(receipt,ensure_ascii=False))
+          PY
+      - name: Package source and receipt temporarily
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e89-leeds-readme-only
+          path: e89_leeds_official_readme/
+          retention-days: 1
+          if-no-files-found: error
