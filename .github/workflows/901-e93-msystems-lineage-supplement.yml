@@ -39,7 +39,7 @@ jobs:
             (d/'E93_official_supplement_index.json').write_text(json.dumps(found,ensure_ascii=False,indent=2),encoding='utf8')
             for wanted,token in [('Table_S1','S1'),('Table_S5','S5')]:
               for item in found:
-                if ('TABLE '+token) in item['label'].upper().replace('\u00a0',' ') or ('Table '+token) in item['label']):
+                if ('TABLE '+token) in item['label'].upper().replace('\u00a0',' ') or ('Table '+token) in item['label']:
                   for k,v in item['url_attrs']:
                     if v.endswith('.docx'):
                       fname=v.rsplit('/',1)[-1]
