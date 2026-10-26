@@ -1,0 +1,64 @@
+name: 901 E91 bounded figshare natural QS metadata intake
+on:
+  push:
+    branches: ['cloud-public-sources-901-e91-20261026']
+    paths: ['.github/workflows/901-e91-lange2026-metadata.yml']
+permissions: {}
+jobs:
+  metadata:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 4
+    steps:
+      - name: Fetch bounded public Figshare metadata only, no large raw download
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,pathlib,hashlib
+          out=pathlib.Path('e91_lange2026_public_metadata');out.mkdir()
+          urls=[
+            'https://api.figshare.com/v2/articles/30752288',
+            'https://api.figshare.com/v2/articles/30752288/versions',
+            'https://api.figshare.com/v2/articles/30752288/files',
+          ]
+          summary={'project':901,'stage':'E91','published_paper_doi':'10.1038/s41467-026-71109-4','dataset_doi':'10.6084/m9.figshare.30752288','github_run_id':os.environ.get('GITHUB_RUN_ID'),'requests':[]}
+          for i,url in enumerate(urls):
+              rec={'url':url,'status':'NOT_RECEIVED'}
+              try:
+                  req=urllib.request.Request(url,headers={'Accept':'application/json','User-Agent':'AcademicPublicSourceMetadata/1.0'})
+                  with urllib.request.urlopen(req,timeout=25) as res:
+                      raw=res.read(300001)
+                      rec['http_status']=res.status
+                      rec['received_bytes']=len(raw)
+                      rec['content_type']=res.headers.get('Content-Type','')[:100]
+                  if len(raw)>300000:raise ValueError('MAX_RESPONSE_BYTES_EXCEEDED')
+                  obj=json.loads(raw)
+                  rec['status']='PASS_PUBLIC_JSON'
+                  rec['sha256']=hashlib.sha256(raw).hexdigest()
+                  rec['root_type']=type(obj).__name__
+                  if isinstance(obj,dict):
+                      rec['title']=obj.get('title')
+                      rec['version']=obj.get('version')
+                      rec['published_date']=obj.get('published_date')
+                      rec['resource_doi']=obj.get('doi')
+                      files=obj.get('files',[])
+                  elif isinstance(obj,list):files=obj
+                  else:files=[]
+                  rec['files_count']=len(files) if isinstance(files,list) else None
+                  if isinstance(files,list):
+                      rec['files']=[{'name':str(f.get('name',''))[:180],'id':f.get('id'),'size':f.get('size'),'is_link_only':f.get('is_link_only'),'computed_md5':f.get('computed_md5'),'supplied_md5':f.get('supplied_md5'),'download_url':f.get('download_url')} for f in files[:50] if isinstance(f,dict)]
+                  (out/('E91_response_'+str(i)+'.json')).write_bytes(raw)
+              except urllib.error.HTTPError as e:
+                  rec.update(status='HTTP_ERROR',http_status=e.code,reason=str(e.reason)[:100])
+              except Exception as e:
+                  rec.update(status='REJECTED_OR_BLOCKED',error_type=type(e).__name__,error=str(e)[:150])
+              summary['requests'].append(rec)
+          (out/'E91_figshare_metadata_receipt.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print(json.dumps(summary,ensure_ascii=False))
+          PY
+      - name: Retain public metadata and receipts for one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e91-natural-qs-figshare-metadata
+          path: e91_lange2026_public_metadata/
+          retention-days: 1
+          if-no-files-found: error
