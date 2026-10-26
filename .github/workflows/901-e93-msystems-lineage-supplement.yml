@@ -32,7 +32,7 @@ jobs:
             for e in root.iter():
               if e.tag.rsplit('}',1)[-1]!='supplementary-material':continue
               label=' '.join(''.join(e.itertext()).split())[:180]
-              urls=[(k,v) for k,v in e.attrib.items() if 'href' in k]
+              urls=[(k,v) for child in e.iter() for k,v in child.attrib.items() if 'href' in k]
               found.append({'id':e.attrib.get('id'),'label':label,'url_attrs':urls})
             result['xml_supplement_count']=len(found)
             result['xml_supplement_index']=found[:14]
