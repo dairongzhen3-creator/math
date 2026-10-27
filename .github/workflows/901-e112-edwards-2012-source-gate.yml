@@ -1,0 +1,116 @@
+name: 901 E112 independent rice study official source and physical-parent eligibility
+on:
+  push:
+    branches: ['cloud-public-sources-901-e112-20261027']
+    paths: ['.github/workflows/901-e112-edwards-2012-source-gate.yml']
+permissions: {}
+jobs:
+  official-limited:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: NIH or EuropePMC official Edwards 2012 JATS source, small original public file only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,pathlib,json,urllib.request,urllib.parse,hashlib,re,xml.etree.ElementTree as ET,csv
+          root=pathlib.Path('e112_new_rice_author_source');root.mkdir()
+          study={'paper':'Edwards Roberts Atwell 2012 rice coleoptile ATP turnover and protein synthesis',
+                 'pmcid':'PMC3421981','doi':'10.1093/jxb/ers114','stage':'E112','run':os.getenv('GITHUB_RUN_ID'),
+                 'scope':'Only one new published paper; NIH PMC OA metadata + EuropePMC JATS, no mass spec, no publisher PDF',
+                 'attempts':[],'official_source_status':'NOT_OBTAINED','certified_independent_parent_rows':0,
+                 'certified_direct_protein_AA_per_cell_s_rows':0,'certified_direct_ATP_hydrolysis_per_cell_s_rows':0}
+          ua='NoncommercialScientificAuditReadOnly/1.0'
+          domains={'pmc-oa-opendata.s3.amazonaws.com','www.ebi.ac.uk'}
+          def fetch(label,url,cap,typ):
+              r={'label':label,'url':url,'status':'NOT_OBTAINED'}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in domains:raise ValueError('HOST_NOT_ALLOWED')
+                  req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'application/xml,application/json'})
+                  with urllib.request.urlopen(req,timeout=28) as response:
+                      if urllib.parse.urlsplit(response.url).hostname not in domains:raise ValueError('REDIRECT_HOST_NOT_ALLOWED')
+                      b=response.read(cap+1)
+                      r.update(http=response.status,mime=response.headers.get('Content-Type','')[:90],resolved_url=response.url)
+                  if len(b)<40 or len(b)>cap:raise ValueError('EMPTY_OR_OVER_CAP')
+                  if b[:150].lstrip().lower().startswith((b'<!doctype html',b'<html')):raise ValueError('HTML_NOT_SOURCE')
+                  obj=json.loads(b) if typ=='json' else ET.fromstring(b)
+                  r.update(status='SOURCE_BYTES_RECEIVED',size_bytes=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest())
+                  (root/(label+'.'+typ)).write_bytes(b)
+                  return r,obj
+              except Exception as e:
+                  r.update(status='NOT_AVAILABLE_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:210]);return r,None
+          meta=None
+          for ver in (1,2,3,4):
+              rec,obj=fetch('NLM_PMC3421981_v'+str(ver)+'_metadata',
+                'https://pmc-oa-opendata.s3.amazonaws.com/metadata/PMC3421981.'+str(ver)+'.json',260000,'json')
+              study['attempts'].append(rec)
+              if isinstance(obj,dict) and obj.get('pmcid')=='PMC3421981' and study['doi'] in str(obj.get('doi','')):
+                  meta=obj; study['pmc_storage_version']=ver
+                  urls=[x if isinstance(x,str) else str(x.get('url','')) for x in obj.get('media_urls') or []]
+                  study['official_media_urls']=urls[:100]
+                  study['registered_media_count']=len(urls)
+                  break
+          xml=None
+          if meta:
+              u=meta.get('xml_url') or ''
+              if u.startswith('s3://pmc-oa-opendata/'):u='https://pmc-oa-opendata.s3.amazonaws.com/'+u.partition('s3://pmc-oa-opendata/')[2]
+              if not u.startswith('https://pmc-oa-opendata.s3.amazonaws.com/'):
+                  u=f"https://pmc-oa-opendata.s3.amazonaws.com/PMC3421981.{study['pmc_storage_version']}/PMC3421981.{study['pmc_storage_version']}.xml"
+              rec,xml=fetch('NIH_PMC3421981_official_JATS',u,1200000,'xml');study['attempts'].append(rec)
+          if xml is None:
+              rec,xml=fetch('EBI_PMC3421981_official_fullTextXML','https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3421981/fullTextXML',1200000,'xml')
+              study['attempts'].append(rec)
+          if xml is not None:
+              artids=[(x.get('pub-id-type',''),''.join(x.itertext()).strip()) for x in xml.iter() if x.tag.rsplit('}',1)[-1]=='article-id']
+              valid=(('pmc','3421981') in artids and ('doi',study['doi']) in artids)
+              study['article_ids']=artids
+              if not valid:
+                  study['official_source_status']='ARTICLE_ID_MISMATCH_REJECT'
+              else:
+                  study['official_source_status']='OFFICIAL_FULLTEXT_XML_IDENTITY_VERIFIED'
+                  blocks=[]
+                  count={}
+                  for e in xml.iter():
+                      tag=e.tag.rsplit('}',1)[-1]
+                      count[tag]=count.get(tag,0)+1
+                      if tag in ('table-wrap','supplementary-material','media','data-availability'):
+                          cap=' '.join(''.join(e.itertext()).split())
+                          blocks.append({'type':tag,'source_id':e.get('id'),'caption_or_text':cap[:340],'source_table_row_count':sum(1 for tr in e.iter() if tr.tag.rsplit('}',1)[-1]=='tr')})
+                  study['structural_counts']={k:count.get(k,0) for k in ('fig','table-wrap','supplementary-material','media','table')}
+                  study['registered_blocks']=blocks[:80]
+                  summary=[]
+                  for tw in xml.iter():
+                      if tw.tag.rsplit('}',1)[-1]!='table-wrap':continue
+                      tid=tw.get('id') or ''
+                      label=next((' '.join(''.join(x.itertext()).split()) for x in tw if x.tag.rsplit('}',1)[-1]=='label'),'')
+                      caption=next((' '.join(''.join(x.itertext()).split()) for x in tw if x.tag.rsplit('}',1)[-1]=='caption'),'')
+                      if re.search(r'\b[137]\b',label) or any(k in caption.lower() for k in ('atp','protein synthesis','synthesis of proteins','turnover')):
+                          trs=[]
+                          for tr in tw.iter():
+                              if tr.tag.rsplit('}',1)[-1]!='tr':continue
+                              vals=[' '.join(''.join(c.itertext()).split())[:170] for c in tr if c.tag.rsplit('}',1)[-1] in ('td','th')]
+                              if vals:trs.append(vals)
+                          summary.append({'source_id':tid,'source_label':label,'caption':caption[:400],'row_count':len(trs),'first_12_rows':trs[:12]})
+                  study['published_tables_sample']=summary[:14]
+                  with (root/'E112_selected_published_table_summaries_ONLY_not_raw_samples.json').open('w',encoding='utf8') as f:
+                      json.dump(summary,f,indent=2,ensure_ascii=False)
+                  snippets=[]
+                  for p in xml.iter():
+                      if p.tag.rsplit('}',1)[-1]!='p':continue
+                      t=' '.join(''.join(p.itertext()).split())
+                      if any(term in t.lower() for term in ('replicat','data availab','raw data','atp production','oxygen consumption','protein synthesis','nmol amino acid')):
+                          snippets.append(t[:540])
+                  study['method_paragraph_snippets']=snippets[:28]
+          study['eligible_for_e111_gate']='PUBLISHED_ARTICLE_XML_ONLY_NO_AUTHOR_PARENT_MAPPED_DUAL_FLUX_PACKAGE'
+          study['published_table_values_not_raw_sample_observations']=True
+          study['reference_numerical_mean_values_not_inference']='Author reported 93,41,32 nmol amino acids/gFW/min across oxygen conditions; ATP production and synthesis costs are based on oxygen/ethanol and stoichiometric models; use source tables as published summaries only'
+          (root/'E112_official_one_study_provenance_and_eligibility_manifest.json').write_text(json.dumps(study,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
+          print('E112_SOURCE_RESULT='+json.dumps({k:v for k,v in study.items() if k not in ('published_tables_sample','method_paragraph_snippets','registered_blocks','official_media_urls')},ensure_ascii=False)[:25000])
+          PY
+      - name: Temporarily archive only original JATS or failure receipts and group summaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e112-rice-Edwards2012-verified-original-and-machine-gate
+          path: e112_new_rice_author_source/
+          retention-days: 1
+          if-no-files-found: error
