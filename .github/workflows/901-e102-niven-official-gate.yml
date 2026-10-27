@@ -1,0 +1,68 @@
+name: 901 E102 one-paper official NLM source and supplemental inventory
+on:
+  push:
+    branches: ['cloud-public-sources-901-e102-20261027']
+    paths: ['.github/workflows/901-e102-niven-official-gate.yml']
+permissions: {}
+jobs:
+  check-public-source:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect only NIH PMC Niven2007 small official metadata and article XML
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.parse,hashlib,json,re,xml.etree.ElementTree as ET
+          p=pathlib.Path('e102_niven2007');p.mkdir()
+          base='https://pmc-oa-opendata.s3.amazonaws.com/'
+          gate={'paper':'Niven Anderson Laughlin PLoS Biol 2007','doi':'10.1371/journal.pbio.0050116','study_id':'PMC1828148','items':[],'new_verified_individual_cell_measurement_rows':0,'new_verified_direct_watts':0,'bit_per_joule':'NOT_CALCULATED'}
+          def get(name,url,cap,mode):
+              r={'name':name,'url':url,'status':'NOT_OBTAINED'}
+              try:
+                  assert url.startswith(base)
+                  with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'NoncommercialDataProvenanceReadOnly/1.0'}),timeout=32) as resp:
+                      assert resp.url.startswith(base)
+                      b=resp.read(cap+1);r['http']=resp.status
+                  if len(b)<15 or len(b)>cap:raise ValueError('BYTE_CAP_OR_EMPTY')
+                  x=json.loads(b) if mode=='json' else ET.fromstring(b)
+                  r.update(status='SOURCE_BYTES_OK',bytes=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest())
+                  (p/(name+'.'+mode)).write_bytes(b);return r,x
+              except Exception as e:r.update(status='UNAVAILABLE_OR_INVALID',error=type(e).__name__+': '+str(e)[:180]);return r,None
+          meta=None;version=None
+          for v in (1,2):
+              item,data=get('PMC1828148_v'+str(v)+'_metadata',base+'metadata/PMC1828148.'+str(v)+'.json',150000,'json')
+              gate['items'].append(item)
+              if isinstance(data,dict) and data.get('pmcid')=='PMC1828148' and 'journal.pbio.0050116' in str(data.get('doi','')):
+                  meta=data;version=v;break
+          if meta:
+              a=[u if isinstance(u,str) else str(u.get('url','')) for u in meta.get('media_urls',[])]
+              files=[urllib.parse.urlsplit(u).path.rsplit('/',1)[-1] for u in a]
+              gate.update(version=version,paper_title=meta.get('title'),media_count=len(a),media_names=files,media_tabular_count=sum(bool(re.search(r'\.(xlsx?|csv|tsv|mat|zip|h5|rdata)$',f,re.I)) for f in files))
+              xml=meta.get('xml_url') or ''
+              if xml.startswith('s3://pmc-oa-opendata/'):xml=base+xml.split('s3://pmc-oa-opendata/',1)[1]
+              if not xml.startswith(base):xml=base+f'PMC1828148.{version}/PMC1828148.{version}.xml'
+              item,tree=get('PMC1828148_JATS',xml,450000,'xml')
+              if tree is not None:
+                  c={}
+                  for el in tree.iter():
+                      tag=el.tag.rsplit('}',1)[-1];c[tag]=c.get(tag,0)+1
+                  supp=[]
+                  for el in tree.iter():
+                      tag=el.tag.rsplit('}',1)[-1]
+                      if tag in ('supplementary-material','supplement','data-availability','data-availability-statement'):
+                          supp.append({'tag':tag,'id':el.get('id'),'summary':' '.join(''.join(el.itertext()).split())[:180]})
+                  item.update(fig_count=c.get('fig',0),tables=c.get('table-wrap',0),supplementary_tag_count=c.get('supplementary-material',0),supplements=supp[:12])
+              gate['items'].append(item)
+          gate['raw_record_scope']='OFFICIAL_REGISTERED_PMC_METADATA_AND_ARTICLE_XML_ONLY'
+          gate['data_absence_claim']='NEVER_GLOBAL_ABSENCE'
+          (p/'E102_official_source_receipt.json').write_text(json.dumps(gate,ensure_ascii=False,indent=2)+'\n')
+          print('E102_NLM_RECEIPT='+json.dumps(gate,ensure_ascii=False)[:14000])
+          PY
+      - name: Archive bounded official records and receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e102-niven-official-source-gate
+          path: e102_niven2007/
+          retention-days: 1
+          if-no-files-found: error
