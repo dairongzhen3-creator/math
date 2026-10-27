@@ -1,0 +1,111 @@
+name: 901 E103 bounded two-paper official-source and polymerization unit QC
+on:
+  push:
+    branches: ['cloud-public-sources-901-e103-20261027']
+    paths: ['.github/workflows/901-e103-translation-model-source-gate.yml']
+permissions: {}
+jobs:
+  official-article-and-model:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch Kempes and Ignatova NIH official small JATS, recalculate only published model quantities
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib,urllib.request,urllib.parse,hashlib,json,xml.etree.ElementTree as ET,decimal,re,math
+          from decimal import Decimal as D
+          out=pathlib.Path('e103_nih_model');out.mkdir()
+          base='https://pmc-oa-opendata.s3.amazonaws.com/'
+          papers=[
+              ('Kempes2017','PMC5686401','10.1098/rsta.2016.0343'),
+              ('Ignatova2018','PMC6032113','10.1152/jn.00017.2018'),
+          ]
+          data={'project':901,'stage':'E103','github_run':os.getenv('GITHUB_RUN_ID'),'scope':'2 published official NLM JATS XML and 300K model operation energy only; no visual raw 50GB, no photoreceptor raw voltages','studies':[]}
+          ua='NoncommercialScientificProvenanceReadOnly/1.0; two public NIH full-texts'
+          def fetch(label,url,cap,kind):
+              rec={'name':label,'url':url,'status':'NOT_OBTAINED','cap_bytes':cap}
+              try:
+                  if not url.startswith(base):raise ValueError('NOT_OFFICIAL_ALLOWLIST')
+                  req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'application/json,application/xml'})
+                  with urllib.request.urlopen(req,timeout=35) as resp:
+                      if not resp.url.startswith(base):raise ValueError('DISALLOWED_REDIRECT')
+                      cl=resp.headers.get('Content-Length')
+                      if cl and int(cl)>cap:raise ValueError('CONTENT_LENGTH_EXCEEDS_CAP')
+                      buf=resp.read(cap+1)
+                      rec['http']=resp.status
+                  if len(buf)>cap or len(buf)<20:raise ValueError('BOUNDED_SOURCE_SIZE_FAIL')
+                  if kind=='json':obj=json.loads(buf)
+                  else:obj=ET.fromstring(buf)
+                  rec.update(status='VALID_OFFICIAL_BYTES',bytes=len(buf),md5=hashlib.md5(buf).hexdigest(),sha256=hashlib.sha256(buf).hexdigest())
+                  (out/(label+'.'+kind)).write_bytes(buf)
+                  return rec,obj
+              except Exception as e:
+                  rec.update(status='NOT_OBTAINED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:220])
+                  return rec,None
+          for name,acc,doi in papers:
+              item={'id':name,'pmcid':acc,'doi':doi,'sources':[]}
+              meta=None;version=None
+              for v in (1,2,3):
+                  rec,d=fetch(name+'_metadata_v'+str(v),base+'metadata/'+acc+'.'+str(v)+'.json',300000,'json')
+                  item['sources'].append(rec)
+                  if d:
+                      if str(d.get('pmcid',''))!=acc or doi not in str(d.get('doi','')):
+                          rec['status']='SOURCE_IDENTITY_FAILED'
+                      else:meta=d;version=v;break
+              if meta is not None:
+                  item['official_version']=version
+                  media=meta.get('media_urls') or []
+                  item['official_media_count']=len(media)
+                  item['official_media_filenames']=[str(v if isinstance(v,str) else v.get('url','')).split('?')[0].rsplit('/',1)[-1] for v in media][:80]
+                  link=meta.get('xml_url','')
+                  if not isinstance(link,str):link=''
+                  if link.startswith('s3://pmc-oa-opendata/'):link=base+link.partition('s3://pmc-oa-opendata/')[2]
+                  if not link.startswith(base):link=base+f'{acc}.{version}/{acc}.{version}.xml'
+                  rec,tree=fetch(name+'_JATS_XML',link,1300000,'xml')
+                  if tree is not None:
+                      c={}
+                      for el in tree.iter():
+                          tag=el.tag.rsplit('}',1)[-1]
+                          c[tag]=c.get(tag,0)+1
+                      rec['structural_counts']={key:c.get(key,0) for key in ('fig','table-wrap','supplementary-material','inline-formula','disp-formula','tex-math','mml:math')}
+                      paragraphs=[' '.join(''.join(e.itertext()).split()) for e in tree.iter() if e.tag.rsplit('}',1)[-1] in ('p','sec')]
+                      terms=['47.7','four ATP','twelve ATP','12 ATP','1.24','5.74','3.17','9.50','Data access','Data availab','60-s','forty different']
+                      rec['source_excerpt_matches']={}
+                      for term in terms:
+                          matches=[p[:380] for p in paragraphs if term.lower() in p.lower()]
+                          if matches:rec['source_excerpt_matches'][term]=matches[:2]
+                  item['sources'].append(rec)
+              data['studies'].append(item)
+          decimal.getcontext().prec=60
+          kb=D('1.380649e-23');NA=D('6.02214076e23');ATPm=D('47700');Temp=D(300)
+          spec=[
+              {'name':'amino_acid_translation_total_4_ATP','alphabet':20,'ATP_eq':4,'reference_floor':'1.24e-20','reference_actual':'3.17e-19','unit':'J per added amino acid'},
+              {'name':'amino_acid_translation_narrow_2_ATP','alphabet':20,'ATP_eq':2,'reference_floor':'1.24e-20','reference_actual':None,'unit':'J per added amino acid, only 2 ATP counted'},
+              {'name':'nucleotide_DNA_replication_12_ATP','alphabet':4,'ATP_eq':12,'reference_floor':'5.74e-21','reference_actual':'9.50e-19','unit':'J per copied nucleotide'},
+          ]
+          results=[]
+          for entry in spec:
+              n=D(entry['alphabet']);a=D(entry['ATP_eq'])
+              floor=kb*Temp*n.ln();actual=a*ATPm/NA
+              ret=dict(entry,Temperature_K='300',molar_ATP_energy_kJ_per_mol='47.7',energy_floor_J=str(floor),ATP_assumed_energy_J=str(actual),cost_over_floor=str(actual/floor),operations_per_joule_assumed=str(1/actual),is_measured_W=False,specification='idealized uniform sequence choice minimum and adopted ATP equivalents')
+              for field,key in (('reference_floor','floor'),('reference_actual','actual')):
+                  if entry[field]: ret[field+'_relative_difference']=str(abs((floor if key=='floor' else actual)/D(entry[field])-1))
+              results.append(ret)
+          data['model_recalculation']=results
+          data['protein_325']={'minimum_J':str(D(325)*kb*Temp*D(20).ln()),'four_ATP_J':str(D(325)*D(4)*ATPm/NA)}
+          data['temperature_sensitivity']=[{'temperature_K':str(T),'aa_ideal_min_J':str(kb*T*D(20).ln()),'nt_ideal_min_J':str(kb*T*D(4).ln())} for T in (D(280),D(300),D(310))]
+          data['numeric_check']= {'rounding_of_author_aa_and_nt_at_T300_pass':all(D(r[x])<D('.005') for r in results for x in ('reference_floor_relative_difference','reference_actual_relative_difference') if x in r)}
+          data['critical_boundary']='amino-acid and nucleotide operations differ; ATP equivalents are model, not jointly observed wattage, Shannon bits/s, or direct bit/J; published cells may rely on inherited scaling fits'
+          data['new_verified_raw_voltage_rows']=0
+          data['new_empirical_cross_taxa_bit_joule']=0
+          (out/'E103_official_source_and_model_reproducibility_manifest.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          print('E103_MACHINE_RESULT='+json.dumps(data,ensure_ascii=False)[:26000])
+          PY
+      - name: Preserve bounded NIH source bytes and independent arithmetic proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e103-kempes-ignatova-official-model-gate
+          path: e103_nih_model/
+          retention-days: 1
+          if-no-files-found: error
