@@ -1,0 +1,76 @@
+name: 901 E106 official publisher supplement locator and source-identity audit
+on:
+  push:
+    branches: ['cloud-public-sources-901-e106-20261027']
+    paths: ['.github/workflows/901-e106-public-supplement-identity.yml']
+permissions: {}
+jobs:
+  public-small-meta:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect one official 2014 publication landing page for true supplementary asset URLs only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          import pathlib,json,re,urllib.request,urllib.parse,hashlib,os
+          o=pathlib.Path('e106_public_publisher');o.mkdir()
+          official='https://www.microbiologyresearch.org/content/journal/micro/10.1099/mic.0.078089-0'
+          receipt={'study':'Lahtvee2014','doi':'10.1099/mic.0.078089-0','stage':'E106','scope':'Official public publisher landing and supplement locator only; no raw spectra, no anonymous blocked endpoints','run':os.getenv('GITHUB_RUN_ID'),'sources':[]}
+          class Extract(HTMLParser):
+              def __init__(self):super().__init__();self.hrefs=[];self.scripts=[];self.cur=None;self.text=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag in ('a','link','script') and any(x in a for x in ('href','src')):
+                      item={'tag':tag,**{k:v for k,v in a.items() if k in ('href','src','rel','type','id','class','data-file','data-url')}}
+                      self.hrefs.append(item)
+                  if tag=='script' and a.get('type') in ('application/ld+json','application/json'):self.cur='script'
+              def handle_endtag(self,tag):
+                  if tag=='script':self.cur=None
+              def handle_data(self,data):
+                  if self.cur=='script':self.scripts.append(data[:10000])
+          def get(name,url,cap):
+              r={'name':name,'url':url,'status':'NOT_FETCHED'}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in ('www.microbiologyresearch.org','microbiologyresearch.org'):raise ValueError('NOT_OFFICIAL_HOST')
+                  req=urllib.request.Request(url,headers={'User-Agent':'PublicScientificSourceAudit/1.0','Accept':'text/html'})
+                  with urllib.request.urlopen(req,timeout=35) as rsp:
+                      if urllib.parse.urlsplit(rsp.url).hostname not in ('www.microbiologyresearch.org','microbiologyresearch.org'):raise ValueError('REDIRECT_OTHER_HOST')
+                      raw=rsp.read(cap+1)
+                      r.update(http=rsp.status,mime=rsp.headers.get('Content-Type',''),final_url=rsp.url)
+                  if len(raw)>cap:raise ValueError('BODY_EXCEEDS_CAP')
+                  if len(raw)<100:raise ValueError('EMPTY_BODY')
+                  r.update(status='PUBLISHER_HTML_OBTAINED',bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),md5=hashlib.md5(raw).hexdigest())
+                  (o/(name+'.html')).write_bytes(raw)
+                  return r,raw.decode('utf8','replace')
+              except Exception as e:r.update(status='FAILED_OR_REJECTED',error=str(e)[:180],error_type=type(e).__name__);return r,None
+          attempts=[('doi_landing',official)]
+          for name,url in attempts:
+              r,text=get(name,url,2200000)
+              if text is not None:
+                  parser=Extract();parser.feed(text)
+                  matches=[]
+                  for t in parser.hrefs:
+                      u=t.get('href') or t.get('src') or ''
+                      if any(y in u.lower() for y in ('078089','supp','pdf','asset','download','figshare','pride')):
+                          matches.append({'tag':t.get('tag'),'url':urllib.parse.urljoin(url,u)[:400]})
+                  lines=[]
+                  for keyword in ('Supplementary material 1','supplementary-material','Supplementary material','078089-0','content-type=\"local-data\"','/doi/suppl','downloadPdf','c5sc03340c1'):
+                      hits=list(re.finditer(re.escape(keyword),text,re.I))
+                      lines.append({'term':keyword,'hits':len(hits),'snippets':[text[max(0,x.start()-370):x.end()+550].replace('\n',' ') for x in hits[:4]]})
+                  r.update(anchor_count=len(parser.hrefs),likely_assets=matches[:85],inline_json_snippets=[v[:300] for v in parser.scripts[:8]],keyword_snippets=lines)
+              receipt['sources'].append(r)
+          receipt['official_publication_advertises_supplement_pdf']=True
+          receipt['PXD000494_20_registered_files_exp_design_absent']=True
+          receipt['biological_parent_join']='NOT_CERTIFIED'
+          (o/'E106_publisher_official_asset_audit.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False)+'\n')
+          print('E106_PUBLISHER_RECEIPT='+json.dumps(receipt,ensure_ascii=False)[:24000])
+          PY
+      - name: Keep provenance artifacts temporarily
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e106-official-publisher-supplement-map
+          path: e106_public_publisher/
+          retention-days: 1
+          if-no-files-found: error
