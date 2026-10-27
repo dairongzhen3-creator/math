@@ -1,0 +1,130 @@
+name: 901 E104 two-study translation-flux plus energy source ID gate
+on:
+  push:
+    branches: ['cloud-public-sources-901-e104-20261027']
+    paths: ['.github/workflows/901-e104-translation-flux-source-gate.yml']
+permissions: {}
+jobs:
+  e104:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Official NIH small metadata and publisher attachment map, bounded original spreadsheets only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.parse,urllib.error,hashlib,json,re,io,zipfile,xml.etree.ElementTree as ET,html.parser,os
+          root=pathlib.Path('e104_official_sources');root.mkdir()
+          out={'project':901,'stage':'E104','run':os.getenv('GITHUB_RUN_ID'),'scope':'Two preselected E. coli studies, public article metadata, at most 3 selected small official Excel attachments; no FASTQ, mass-spec raw, optimizer/Gurobi, or paid computing','study_records':[],'source_files':[]}
+          base='https://pmc-oa-opendata.s3.amazonaws.com/'
+          ua='NoncommercialScientificProvenanceReadOnly/1.0'
+          hosts={'pmc-oa-opendata.s3.amazonaws.com','www.nature.com','static-content.springer.com','media.springernature.com','www.ebi.ac.uk'}
+          max_total=12500000; total=0
+          def get(label,url,cap,ext,allow_html=False):
+              global total
+              e={'label':label,'url':url,'status':'NOT_OBTAINED','cap':cap}
+              try:
+                  u=urllib.parse.urlsplit(url)
+                  if u.hostname not in hosts:raise ValueError('UNEXPECTED_SOURCE_HOST_'+str(u.hostname))
+                  request=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
+                  with urllib.request.urlopen(request,timeout=40) as res:
+                      final=res.url
+                      if urllib.parse.urlsplit(final).hostname not in hosts:raise ValueError('REDIRECT_OUTSIDE_SOURCE_HOSTS')
+                      length=res.headers.get('Content-Length')
+                      if length and int(length)>cap:raise ValueError('CONTENT_LENGTH_OVER_CAP')
+                      b=res.read(cap+1)
+                      e['http']=res.status;e['mime']=(res.headers.get('Content-Type') or '')[:80];e['final_url']=final
+                  if not 10<len(b)<=cap:raise ValueError('BODY_SIZE_CAP_OR_EMPTY')
+                  if not allow_html and b[:250].lstrip().lower().startswith((b'<!doctype html',b'<html')):raise ValueError('HTML_NOT_DATA')
+                  total+=len(b)
+                  if total>max_total:raise ValueError('TOTAL_BYTE_CAP')
+                  e.update(status='VALID_SOURCE_BYTES',bytes=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest())
+                  (root/(label+ext)).write_bytes(b)
+                  return e,b
+              except Exception as ex:
+                  e.update(status='FAILED_OR_REJECTED',error=type(ex).__name__+': '+str(ex)[:190]);return e,None
+          studies=[
+              {'name':'Mori2023_FDM','pmcid':'PMC10345195','doi':'10.1038/s41467-023-39724-7','public_publisher_page':'https://www.nature.com/articles/s41467-023-39724-7'},
+              {'name':'Li2018_nutrient_translation','pmcid':'PMC6278830','doi':'10.1038/s41564-018-0199-2','public_publisher_page':'https://www.nature.com/articles/s41564-018-0199-2'},
+          ]
+          for st in studies:
+              rec={k:v for k,v in st.items()}
+              rec['sources']=[]
+              metadata=None
+              for version in (1,2,3):
+                  m,b=get(st['name']+'_NIH_metadata_v'+str(version),base+'metadata/'+st['pmcid']+'.'+str(version)+'.json',280000,'.json')
+                  rec['sources'].append(m)
+                  if b:
+                      try:
+                          d=json.loads(b)
+                          if d.get('pmcid')==st['pmcid'] and st['doi'] in str(d.get('doi','')):
+                              rec['source_version']=version;metadata=d;break
+                          m['status']='MISMATCH_DOI_OR_PMID'
+                      except Exception as e:m['error_parse']=str(e)[:90]
+              rec['registered_media']=[]
+              if metadata:
+                  urls=[x if isinstance(x,str) else x.get('url','') for x in (metadata.get('media_urls') or [])]
+                  rec['registered_media']=[{'name':urllib.parse.urlsplit(u).path.rsplit('/',1)[-1],'url':u} for u in urls]
+                  rec['media_count']=len(urls)
+              # official publisher download anchors are read-only source locator, not assertion of sample identity
+              h,b=get(st['name']+'_publisher_article_HTML',st['public_publisher_page'],2200000,'.html',True)
+              if b:
+                  txt=b.decode('utf8','replace')
+                  class Anchors(html.parser.HTMLParser):
+                      def __init__(self):super().__init__();self.items=[];self.ina=False;self.href='';self.buf=[]
+                      def handle_starttag(self,tag,attrs):
+                          if tag=='a':self.ina=True;self.href=dict(attrs).get('href','');self.buf=[]
+                      def handle_data(self,data):
+                          if self.ina:self.buf.append(data)
+                      def handle_endtag(self,tag):
+                          if tag=='a' and self.ina:
+                              self.items.append({'label':' '.join(' '.join(self.buf).split())[:120],'href':self.href})
+                              self.ina=False
+                  a=Anchors();a.feed(txt)
+                  anchors=[{'text':k['label'],'url':urllib.parse.urljoin(st['public_publisher_page'],k['href'])} for k in a.items if any(w in (k['label']+' '+k['href']).lower() for w in ('supplementary data','supplementary dataset','supplemental','xlsx','.xls','source data'))]
+                  rec['supplement_link_anchors']=anchors[:80]
+                  rec['html_size']=len(b)
+              rec['sources'].append(h)
+              out['study_records'].append(rec)
+          # official S3 metadata carries signed object URL; only take bounded xlsx explicitly identified as particular study media.
+          picks=[]
+          mori=out['study_records'][0];li=out['study_records'][1]
+          for st in out['study_records']:
+              for link in st.get('supplement_link_anchors',[]):
+                  label=link['text'].lower();url=link['url']
+                  if st['name']=='Mori2023_FDM' and any(('data '+str(i)) in label or ('dataset '+str(i)) in label for i in (2,6)):
+                      picks.append((st['name'],label,url))
+                  if st['name']=='Li2018_nutrient_translation' and ('.xlsx' in url.lower() or 'supplemental' in label):
+                      picks.append((st['name'],label,url))
+          out['candidate_anchor_picks']=[{'study':n,'label':l,'url':u} for n,l,u in picks[:15]]
+          count=0
+          for name,label,url in picks[:6]:
+              if count>=3:break
+              if not (url.lower().split('?')[0].endswith(('.xlsx','.xls','.zip'))):continue
+              e,b=get('E104_selected_'+str(count)+'_'+name,url,4000000,'.xlsx')
+              if b:
+                  if not b.startswith(b'PK\x03\x04'):
+                      e['status']='REJECT_INVALID_XLSX_PK';(root/('E104_selected_'+str(count)+'_'+name+'.xlsx')).unlink()
+                  else:
+                      z=zipfile.ZipFile(io.BytesIO(b))
+                      if 'xl/workbook.xml' not in z.namelist() or z.testzip() or sum(v.file_size for v in z.infolist())>100000000:
+                          e['status']='REJECT_NOT_VALID_SPREADSHEET';(root/('E104_selected_'+str(count)+'_'+name+'.xlsx')).unlink()
+                      else:
+                          e['sheets']=[v.get('name') for v in ET.fromstring(z.read('xl/workbook.xml')).iter() if v.tag.endswith('}sheet')]
+                          e['selected_link_label']=label
+                          e['dataset_status']='AUTHOR_PUBLISHED_SHEET_NOT_SAME_PHYSICAL_CULTURE_PROOF'
+                          count+=1
+              out['source_files'].append(e)
+          out['strict_same_culture_aa_per_s_and_independently_measured_ATP_s_pairs']=0
+          out['energy_flux_evidence']='PUBLISHER_ATP_BALANCE_IS_STOICHIOMETRICALLY_MODELED_UNLESS_RAW_DIRECT_FLUX_PROVED'
+          out['Q3']='NOT_TESTED'
+          (root/'E104_two_study_source_gate_receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+          print('E104_MACHINE_RESULT='+json.dumps(out,ensure_ascii=False)[:30000])
+          PY
+      - name: Save bounded public article source receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e104-two-Ecoli-sources-official-inventory
+          path: e104_official_sources/
+          retention-days: 1
+          if-no-files-found: error
