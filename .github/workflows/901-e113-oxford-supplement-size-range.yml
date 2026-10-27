@@ -1,0 +1,115 @@
+name: 901 E113 Oxford original supplemental ZIP HEAD and bounded member inventory
+on:
+  push:
+    branches: ['cloud-public-sources-901-e113-20261027']
+    paths: ['.github/workflows/901-e113-oxford-supplement-size-range.yml']
+permissions: {}
+jobs:
+  bounded:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Publisher HEAD, bounded direct ZIP or HTTP206 exact central-directory and selective original records
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,pathlib,urllib.request,urllib.parse,json,hashlib,re,html,zipfile,io,struct,zlib
+          root=pathlib.Path('e113_verified_zip_inventory');root.mkdir()
+          source='https://oup.silverchair-cdn.com/article-minimal/6117444'
+          receipt={'stage':'E113','doi':'10.1104/pp.17.00610','run':os.getenv('GITHUB_RUN_ID'),'status':'NOT_OBTAINED','source_host':'oup.silverchair-cdn.com','budget_bytes':20500000,'transferred_bytes':0,'member_inventory':[],'transfers':[]}
+          ua='NoncommercialScientificProvenanceReadOnly/1.0'
+          budget=20500000;total=0
+          def req(url,method='GET',start=None,end=None,limit=21000000):
+              global total
+              headers={'User-Agent':ua,'Accept':'*/*'}
+              if start is not None:headers['Range']=f'bytes={start}-{end}'
+              request=urllib.request.Request(url,headers=headers,method=method)
+              with urllib.request.urlopen(request,timeout=50) as r:
+                  if urllib.parse.urlsplit(r.url).hostname!='oup.silverchair-cdn.com':raise ValueError('UNVERIFIED_REDIRECT')
+                  info={'status':r.status,'content_length':r.headers.get('Content-Length'),'range':r.headers.get('Content-Range'),'accept_ranges':r.headers.get('Accept-Ranges'),'content_type':r.headers.get('Content-Type')}
+                  if method!='HEAD':
+                      n=int(r.headers.get('Content-Length') or '0')
+                      if n and n>limit:raise ValueError('DECLARED_LENGTH_EXCEEDS_BOUND')
+                      b=r.read(limit+1)
+                  else:b=b''
+              if len(b)>limit or total+len(b)>budget:raise ValueError('ACTUAL_OR_TOTAL_BYTES_OVER_BOUND')
+              total+=len(b)
+              receipt['transferred_bytes']=total
+              receipt['transfers'].append({'method':method,'start':start,'end':end,'http':info['status'],'length':len(b),'sha256':hashlib.sha256(b).hexdigest() if b else None})
+              return b,info
+          try:
+              page,phead=req(source,limit=600000)
+              if '10.1104/pp.17.00610' not in page.decode('utf8','replace'):raise ValueError('WRONG_PUBLISHER_PAGE')
+              (root/'OLeary2017_publisher_original_html.html').write_bytes(page)
+              receipt['page_bytes']=len(page)
+              receipt['page_sha256']=hashlib.sha256(page).hexdigest()
+              decoded=page.decode('utf8','replace')
+              links=re.findall(r'''(?:href|src)=["']([^"']+?plphys_v174_4_2261_s1\.zip[^"']*)["']''',decoded,re.I)
+              if not links:raise ValueError('SUPPLEMENT_LINK_NOT_IN_OFFICIAL_ARTICLE')
+              url=html.unescape(links[0]).replace('\\u0026','&')
+              url=urllib.parse.urljoin(source,url)
+              if urllib.parse.urlsplit(url).hostname!='oup.silverchair-cdn.com' or not urllib.parse.urlsplit(url).path.endswith('plphys_v174_4_2261_s1.zip'):raise ValueError('BAD_SUPPLEMENT_URL')
+              body,info=req(url,'HEAD')
+              expected=int(info['content_length'] or '0')
+              receipt['original_supplement_size_from_HEAD']=expected
+              receipt['official_supplement_range_supported_header']=info['accept_ranges']
+              if not 0<expected<1000000000:raise ValueError('UNKNOWN_OR_OVERSIZED_SUPPLEMENT')
+              if expected<=15000000:
+                  data,h=req(url,limit=16000000)
+                  if len(data)!=expected or not data.startswith(b'PK\x03\x04'):raise ValueError('NOT_ZIP_OR_SIZE')
+                  z=zipfile.ZipFile(io.BytesIO(data))
+                  if z.testzip() or len(z.infolist())>500:raise ValueError('ZIP_BAD_CRC_OR_MEMBER_COUNT')
+                  receipt['member_inventory']=[{'name':x.filename,'bytes':x.file_size,'compressed':x.compress_size,'crc':format(x.CRC,'08x')} for x in z.infolist()]
+                  receipt['archive_sha256']=hashlib.sha256(data).hexdigest()
+                  (root/'plphys_v174_4_2261_s1_original_oxford.zip').write_bytes(data)
+                  receipt['status']='ORIGINAL_PUBLISHER_ZIP_FULL_CRC_VERIFIED'
+              else:
+                  tail_start=max(0,expected-131072)
+                  tail,h=req(url,start=tail_start,end=expected-1,limit=131072)
+                  if h['status']!=206:raise ValueError('CDN_RANGE_NOT_SUPPORTED')
+                  if h['range']!=f'bytes {tail_start}-{expected-1}/{expected}':raise ValueError('CONTENT_RANGE_NOT_EXACT')
+                  ep=tail.rfind(b'PK\x05\x06')
+                  if ep<0 or ep+22>len(tail):raise ValueError('ZIP_EOCD_NOT_FOUND')
+                  eocd=struct.unpack_from('<IHHHHIIH',tail,ep)
+                  _,d1,d2,n1,nt,cdsize,cdoffset,comment=eocd
+                  if d1 or d2 or n1!=nt or cdsize>750000 or nt>500:raise ValueError('ZIP_UNSUPPORTED_OR_LARGE_CENTRAL_DIRECTORY')
+                  cd,info=req(url,start=cdoffset,end=cdoffset+cdsize-1,limit=750000)
+                  if info['status']!=206:raise ValueError('ZIP_CD_NOT_HTTP206')
+                  offset=0;index=[]
+                  for i in range(nt):
+                      hdr=struct.unpack_from('<IHHHHHHIIIHHHHHII',cd,offset)
+                      sg,vm,vn,flags,meth,t,day,crc,csize,usize,nlen,xlen,clen,disk,intattr,extattr,local=hdr
+                      if sg!=0x02014b50:raise ValueError('ZIP_CD_SIGNATURE')
+                      name=cd[offset+46:offset+46+nlen].decode('utf8' if flags&2048 else 'cp437','replace')
+                      index.append({'name':name,'bytes':usize,'compressed':csize,'method':meth,'crc':format(crc,'08x'),'local_header':local})
+                      offset+=46+nlen+xlen+clen
+                  if offset!=len(cd):raise ValueError('ZIP_CD_MISMATCH')
+                  receipt['member_inventory']=index
+                  (root/'E113_author_ZIP_central_directory_original.bin').write_bytes(cd)
+                  receipt['status']='ORIGINAL_PUBLISHER_ZIP_CENTRAL_DIRECTORY_HTTP206_PASS'
+                  # Extract at most 3 verified small CSV/TSV/TXT files (do not unpack opaque binary images).
+                  eligible=[x for x in index if x['bytes']<=300000 and x['compressed']<=250000 and x['method'] in (0,8) and x['name'].lower().endswith(('.csv','.tsv','.txt'))]
+                  for item in eligible[:3]:
+                      off=item['local_header']
+                      head,h=req(url,start=off,end=off+29,limit=30)
+                      fh=struct.unpack('<IHHHHHIIIHH',head)
+                      if fh[0]!=0x04034b50:raise ValueError('LOCAL_HEADER')
+                      st=off+30+fh[-2]+fh[-1]
+                      piece,h=req(url,start=st,end=st+item['compressed']-1,limit=250000)
+                      clear=zlib.decompress(piece,-15) if item['method']==8 else piece
+                      if len(clear)!=item['bytes'] or zlib.crc32(clear)!=int(item['crc'],16):raise ValueError('ZIP_MEMBER_CRC')
+                      (root/('original_nested_'+str(len(receipt['transfers']))+'.txt')).write_bytes(clear)
+              receipt['source_is_official_publisher']=True
+          except Exception as e:
+              receipt['status']='FAILED_OR_REJECTED'
+              receipt['error']=type(e).__name__+': '+str(e)[:260]
+          (root/'E113_exact_oxford_source_ZIP_audit.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False)+'\n')
+          print('E113_ZIP_GROUNDING='+json.dumps({k:v for k,v in receipt.items() if k not in ('transfers',)},ensure_ascii=False)[:16000])
+          PY
+      - name: Save public bytes, hash receipt and indexed listed members only
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e113-Oxford-zip-source-full-or-bounded-central-directory
+          path: e113_verified_zip_inventory/
+          retention-days: 1
+          if-no-files-found: error
