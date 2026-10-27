@@ -1,0 +1,88 @@
+name: 901 E104 verify NIH original Supplementary Data 2 and 6 without model fitting
+on:
+  push:
+    branches: ['cloud-public-sources-901-e104-20261027']
+    paths: ['.github/workflows/901-e104-mori-two-source-workbooks.yml']
+permissions: {}
+jobs:
+  provenance-and-structure:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Fetch 2 publisher-indexed NIH original Excel files, verify official MD5 and sheet/row structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.parse,hashlib,json,zipfile,io,xml.etree.ElementTree as ET,re,os
+          d=pathlib.Path('e104_two_verified_Mori_author_workbooks');d.mkdir()
+          base='https://pmc-oa-opendata.s3.amazonaws.com/PMC10345195.1/'
+          sources=[
+              ('Mori2023_Supplementary_Data_2_growth_and_flux','41467_2023_39724_MOESM5_ESM.xlsx','7b8be7f983c18897ce855f68a6c6210f'),
+              ('Mori2023_Supplementary_Data_6_model_energy_costs','41467_2023_39724_MOESM9_ESM.xlsx','d451fb8f8d07d5fca1ac99aef7697156'),
+          ]
+          result={'study_doi':'10.1038/s41467-023-39724-7','stage':'E104','published_identity_mapping':'NIH/JATS Supplementary Dataset 2=MOESM5 and Dataset6=MOESM9; original media_url md5 from PMC10345195.1.json','scope':'Two small original author tables, no downloaded mass spectrometry raw/no GUROBI/no FBA rerun; math audit only','files':[]}
+          for label,filename,expected in sources:
+              uri=base+filename+'?md5='+expected
+              row={'name':label,'official_filename':filename,'official_md5':expected,'official_url':uri,'status':'NOT_OBTAINED'}
+              try:
+                  req=urllib.request.Request(uri,headers={'User-Agent':'NoncommercialScientificSourceVerification/1.0'})
+                  with urllib.request.urlopen(req,timeout=55) as rsp:
+                      if urllib.parse.urlsplit(rsp.url).hostname!='pmc-oa-opendata.s3.amazonaws.com':raise ValueError('OFF_DOMAIN_REDIRECT')
+                      size=rsp.headers.get('Content-Length')
+                      if size and int(size)>5000000:raise ValueError('SOURCE_TOO_LARGE')
+                      content=rsp.read(5000001)
+                      row.update(http=rsp.status,mime=(rsp.headers.get('Content-Type') or '')[:90])
+                  if len(content)>5000000 or not content.startswith(b'PK\x03\x04'):raise ValueError('NOT_XLSX_MAGIC')
+                  actual=hashlib.md5(content).hexdigest()
+                  row.update(bytes=len(content),md5=actual,sha256=hashlib.sha256(content).hexdigest())
+                  if actual!=expected:raise ValueError('PUBLISHED_MD5_MISMATCH')
+                  z=zipfile.ZipFile(io.BytesIO(content))
+                  info=z.infolist()
+                  if z.testzip() or not any(v.filename=='xl/workbook.xml' for v in info):raise ValueError('INVALID_XLSX_CRC_OR_WORKBOOK')
+                  if len(info)>250 or sum(v.file_size for v in info)>90000000:raise ValueError('ZIP_UNPACK_CAP')
+                  shared=[]
+                  if 'xl/sharedStrings.xml' in z.namelist():
+                      if z.getinfo('xl/sharedStrings.xml').file_size>12000000:raise ValueError('SHARED_STRINGS_CAP')
+                      s=ET.fromstring(z.read('xl/sharedStrings.xml'))
+                      shared=[''.join(t.text or '' for t in e.iter() if t.tag.endswith('}t'))[:230] for e in s if e.tag.endswith('}si')]
+                  sheetnames=[e.get('name') for e in ET.fromstring(z.read('xl/workbook.xml')).iter() if e.tag.endswith('}sheet')]
+                  sheetfiles=sorted((v for v in z.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml',v)),key=lambda s:int(re.search(r'sheet(\d+)',s).group(1)))
+                  details=[]
+                  for k,fname in enumerate(sheetfiles[:35]):
+                      nrows=0;ncells=0; sample=[]
+                      with z.open(fname) as inp:
+                          for event,el in ET.iterparse(inp,events=('end',)):
+                              if not el.tag.endswith('}row'):continue
+                              nrows+=1
+                              cells=[]
+                              for c in el:
+                                  if not c.tag.endswith('}c'):continue
+                                  ncells+=1
+                                  if nrows>7:continue
+                                  val=next((q.text or '' for q in c if q.tag.endswith('}v')),None)
+                                  if c.get('t')=='s' and val is not None:
+                                      try:val=shared[int(val)]
+                                      except (IndexError,ValueError):val='UNRESOLVED_SHARED_STRING'
+                                  elif c.get('t')=='inlineStr':val=''.join(q.text or '' for q in c.iter() if q.tag.endswith('}t'))
+                                  if val is not None:cells.append([c.get('r'),str(val)[:150]])
+                              if nrows<=7:sample.append(cells[:24])
+                              el.clear()
+                      details.append({'sheet_name':sheetnames[k] if k<len(sheetnames) else fname,'rows':nrows,'nonempty_cells':ncells,'first_rows':sample})
+                  row.update(status='OFFICIAL_AUTHOR_XLSX_MD5_CRC_PASS',sheet_names=sheetnames,zip_members=len(info),sheet_summary=details)
+                  (d/(label+'.xlsx')).write_bytes(content)
+                  (d/(label+'_machine_schema_audit.json')).write_text(json.dumps({'source_url':uri,'md5':actual,'sha256':row['sha256'],'sheets':details},ensure_ascii=False,indent=2)+'\n')
+              except Exception as e:
+                  row.update(status='SOURCE_REJECTED_OR_UNAVAILABLE',error_type=type(e).__name__,error=str(e)[:240])
+              result['files'].append(row)
+          result['certified_joint_culture_aa_per_s_ATP_flux']=0
+          result['claim_status']='AUTHOR_ORIGINAL_TABLES_OBTAINED_DOES_NOT_PROVE_DIRECT_ATP_WATTS_OR_SAME_PHYSICAL_BIOLOGICAL_PARENT'
+          (d/'E104_NIH_two_Mori_published_sheets_original_source_receipt.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          print('E104_OFFICIAL_XLSX='+json.dumps(result,ensure_ascii=False)[:28000])
+          PY
+      - name: Preserve two public source workbooks for transfer
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e104-verified-growth-flux-vs-model-energy-workbooks
+          path: e104_two_verified_Mori_author_workbooks/
+          retention-days: 1
+          if-no-files-found: error
