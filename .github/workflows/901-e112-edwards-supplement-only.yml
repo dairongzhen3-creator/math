@@ -1,0 +1,51 @@
+name: 901 E112 rice official supplement byte and identity verification
+on:
+  push:
+    branches: ['cloud-public-sources-901-e112-20261027']
+    paths: ['.github/workflows/901-e112-edwards-supplement-only.yml']
+permissions: {}
+jobs:
+  bounded-supplement:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Only original verified NIH OA supplement pdf and index
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,urllib.request,urllib.parse,hashlib
+          root=pathlib.Path('e112_official_supplement');root.mkdir()
+          base='https://pmc-oa-opendata.s3.amazonaws.com/PMC3421981.1/'
+          sources=[
+           ('E112_Edwards2012_official_supplement','supp_ers114_00074955-file001.pdf','da72fb477bedbb3b5c5de481db51ecbe',4000000,'pdf'),
+           ('E112_Edwards2012_original_supplement_index','supp_63_12_4389__index.html','c5475761b8341ceda8418d8ec15ac3dc',500000,'html')
+          ]
+          records=[]
+          for label,name,md5,limit,kind in sources:
+              url=base+name+'?md5='+md5; rec={'source_file':name,'published_expected_md5':md5,'url':url,'status':'NOT_FETCHED'}
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':'NoncommercialScientificSourceProvenance/1.0'})
+                  with urllib.request.urlopen(req,timeout=40) as r:
+                      if urllib.parse.urlsplit(r.url).hostname!='pmc-oa-opendata.s3.amazonaws.com':raise ValueError('HOST_CHANGED')
+                      raw=r.read(limit+1)
+                      rec.update(http=r.status,mime=r.headers.get('Content-Type',''))
+                  if not 10<len(raw)<=limit:raise ValueError('BOUND_OR_EMPTY')
+                  actual=hashlib.md5(raw).hexdigest()
+                  if actual!=md5:raise ValueError('PUBLISHED_MD5_MISMATCH_'+actual)
+                  if kind=='pdf' and not raw.startswith(b'%PDF-'):raise ValueError('NOT_PDF_MAGIC')
+                  if kind=='html' and b'supp' not in raw.lower():raise ValueError('NOT_SUPPLEMENT_INDEX')
+                  (root/(label+'.'+kind)).write_bytes(raw)
+                  rec.update(status='OFFICIAL_ORIGINAL_MD5_VERIFIED',bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),md5=actual)
+              except Exception as e:
+                  rec.update(status='REJECTED_OR_UNAVAILABLE',error_type=type(e).__name__,error=str(e)[:220])
+              records.append(rec)
+          (root/'E112_supplement_original_source_receipt.json').write_text(json.dumps(records,indent=2)+'\n')
+          print('E112_SUPPLEMENT='+json.dumps(records)[:7000])
+          PY
+      - name: Archive bounded published supplemental source for scientific identity check
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e112-Edwards2012-original-NLM-supplement
+          path: e112_official_supplement/
+          retention-days: 1
+          if-no-files-found: error
