@@ -1,0 +1,81 @@
+name: 901 E113 recover publisher-original 2017 Plant Physiology supplement with checksum
+on:
+  push:
+    branches: ['cloud-public-sources-901-e113-20261027']
+    paths: ['.github/workflows/901-e113-oxford-supplement-recovery.yml']
+permissions: {}
+jobs:
+  supplement:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Only one verified publisher article minimal HTML and its linked official supplement ZIP
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,pathlib,urllib.request,urllib.parse,re,html,json,hashlib,io,zipfile,xml.etree.ElementTree as ET
+          root=pathlib.Path('e113_publisher_supplement');root.mkdir()
+          article='https://oup.silverchair-cdn.com/article-minimal/6117444'
+          rec={'stage':'E113','project':901,'doi':'10.1104/pp.17.00610','run':os.getenv('GITHUB_RUN_ID'),'source_article':article,'scope':'Only official Oxford article-minimal HTML and directly linked plphys_v174_4_2261_s1.zip, capped <5MB total network','status':'NOT_OBTAINED','originals':[]}
+          ua='NoncommercialScientificSourceAudit/1.0'
+          total=0
+          def get(url,limit):
+              global total
+              req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
+              with urllib.request.urlopen(req,timeout=45) as rsp:
+                  final=rsp.url
+                  if urllib.parse.urlsplit(final).hostname not in ('oup.silverchair-cdn.com','academic.oup.com'):raise ValueError('NOT_PUBLISHER_HOST')
+                  leng=rsp.headers.get('Content-Length')
+                  if leng and int(leng)>limit:raise ValueError('CONTENT_LENGTH_CAP')
+                  blob=rsp.read(limit+1)
+                  http=rsp.status;mime=rsp.headers.get('Content-Type')
+              if not 20<len(blob)<=limit or total+len(blob)>5400000:raise ValueError('TOTAL_BYTE_LIMIT')
+              total+=len(blob)
+              return blob,{'http':http,'mime':mime,'byte_count':len(blob),'sha256':hashlib.sha256(blob).hexdigest(),'md5':hashlib.md5(blob).hexdigest(),'final_url_hostname':urllib.parse.urlsplit(final).hostname}
+          try:
+              body,receipt=get(article,2200000)
+              text=body.decode('utf8','replace')
+              if '10.1104/pp.17.00610' not in text or 'Variation in Leaf Respiration Rates' not in text:raise ValueError('WRONG_ARTICLE_HTML_IDENTITY')
+              (root/'OLeary2017_official_Oxford_article_minimal.html').write_bytes(body)
+              rec['originals'].append({'original':'OxfordArticleHTML',**receipt})
+              rec['html_identity_verified']=True
+              # Extract one published link and decode HTML entities. Never embed signed token in receipts.
+              matches=re.findall(r'''(?:href|src)=["']([^"']+?plphys_v174_4_2261_s1\.zip[^"']*)["']''',text,re.I)
+              if not matches:
+                  # fallback signed URLs present in script or embedded JSON
+                  matches=re.findall(r'''https?[^"'\s<>]*plphys_v174_4_2261_s1\.zip[^"'\s<>]*''',text,re.I)
+              rec['official_supplement_link_occurrences']=len(matches)
+              if not matches:raise ValueError('NO_OFFICIAL_SUPPLEMENT_LINK')
+              url=html.unescape(matches[0]).replace('\\u0026','&')
+              if url.startswith('//'):url='https:'+url
+              url=urllib.parse.urljoin(article,url)
+              parsed=urllib.parse.urlsplit(url)
+              if parsed.hostname!='oup.silverchair-cdn.com' or not parsed.path.endswith('/plphys_v174_4_2261_s1.zip'):raise ValueError('SUPPLEMENT_LINK_WRONG_PATH_OR_DOMAIN')
+              contents,info=get(url,3200000)
+              if not contents.startswith(b'PK\x03\x04'):raise ValueError('ZIP_MAGIC_INVALID')
+              z=zipfile.ZipFile(io.BytesIO(contents))
+              if len(z.infolist())>80 or sum(x.file_size for x in z.infolist())>70000000 or z.testzip():raise ValueError('ZIP_CRC_OR_BOMB_REJECT')
+              if any(x.filename.startswith('/') or '..' in pathlib.PurePosixPath(x.filename).parts for x in z.infolist()):raise ValueError('ZIP_PATH_REJECT')
+              (root/'plphys_v174_4_2261_s1_official.zip').write_bytes(contents)
+              rec['originals'].append({'original':'OfficialOxford2017SupplementZip',**info})
+              members=[]
+              for e in z.infolist():
+                  members.append({'name':e.filename,'bytes':e.file_size,'compressed_bytes':e.compress_size,'crc32':hex(e.CRC)})
+                  if e.file_size<=140000 and e.filename.lower().endswith(('.csv','.txt','.tsv')) and e.is_dir() is False:
+                      b=z.read(e)
+                      (root/('nested_'+str(len(members))+'.txt')).write_bytes(b)
+              rec['members']=members
+              rec['status']='PUBLISHER_ORIGINAL_SUPPLEMENT_ZIP_CRC_PASS'
+          except Exception as e:
+              rec.update(status='OFFICIAL_SOURCE_FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:230])
+          rec['network_bytes']=total
+          (root/'E113_publisher_source_and_supplement_machine_receipt.json').write_text(json.dumps(rec,indent=2,ensure_ascii=False)+'\n')
+          print('E113_SUPPLEMENT='+json.dumps(rec,ensure_ascii=False)[:12500])
+          PY
+      - name: Temporary source transfer with explicit exact origin and no user data
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e113-Oxford-original-supplement-Journal-PlantPhysiology
+          path: e113_publisher_supplement/
+          retention-days: 1
+          if-no-files-found: error
