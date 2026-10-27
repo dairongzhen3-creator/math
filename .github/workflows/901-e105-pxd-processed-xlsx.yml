@@ -1,0 +1,77 @@
+name: 901 E105 official PXD000494 processed proteomics XLSX source and sample identity
+on:
+  push:
+    branches: ['cloud-public-sources-901-e105-20261027']
+    paths: ['.github/workflows/901-e105-pxd-processed-xlsx.yml']
+permissions: {}
+jobs:
+  original-source:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Retrieve exact PRIDE public project processed output, size ZIP CRC and header audit
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, urllib.request, urllib.parse, zipfile, hashlib, csv, json, xml.etree.ElementTree as ET, re, io, os
+          root=pathlib.Path('e105_pride_processed');root.mkdir()
+          URL='https://ftp.pride.ebi.ac.uk/pride/data/archive/2014/01/PXD000494/proteinGroups_SILACLys_ModifArg.xlsx'
+          report={'project':'PXD000494','study':'Lahtvee2014_Lactococcus_lactis_protein_turnover','original_filename':'proteinGroups_SILACLys_ModifArg.xlsx','published_size_bytes':3544158,'source_url':URL,'status':'NOT_OBTAINED','limitations':'PXD project raw files vs biological culture units are distinct; abundance or SILAC ratios do not establish same culture independently measured ATP hydrolysis'}
+          try:
+              req=urllib.request.Request(URL,headers={'User-Agent':'PublicScientificSourceAudit/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+              with urllib.request.urlopen(req,timeout=40) as rsp:
+                  if urllib.parse.urlsplit(rsp.url).hostname not in ('ftp.pride.ebi.ac.uk','www.ebi.ac.uk'): raise ValueError('UNEXPECTED_FILE_HOST')
+                  cl=rsp.headers.get('Content-Length')
+                  if cl and int(cl)>4250000: raise ValueError('CONTENT_LENGTH_OVER_CAP')
+                  content=rsp.read(4250001)
+                  report.update(http=rsp.status,mime=rsp.headers.get('Content-Type'),final_url=rsp.url)
+              if len(content)!=3544158:raise ValueError('PUBLISHED_FILE_SIZE_MISMATCH')
+              if not content.startswith(b'PK\x03\x04'):raise ValueError('NOT_OFFICE_ZIP')
+              z=zipfile.ZipFile(io.BytesIO(content))
+              infos=z.infolist()
+              if len(infos)>250:raise ValueError('EXCESSIVE_ZIP_FILES')
+              if sum(q.file_size for q in infos)>240000000:raise ValueError('UNCOMPRESSED_CAP_EXCEEDED')
+              if z.testzip():raise ValueError('ZIP_CRC_FAILED')
+              if 'xl/workbook.xml' not in z.namelist():raise ValueError('NOT_XLSX_WORKBOOK')
+              if any(q.filename.startswith('/') or '..' in pathlib.PurePosixPath(q.filename).parts for q in infos):raise ValueError('UNSAFE_ZIP_MEMBER')
+              sheets=[e.get('name') for e in ET.fromstring(z.read('xl/workbook.xml')).iter() if e.tag.endswith('}sheet')]
+              shared=[]
+              if 'xl/sharedStrings.xml' in z.namelist():
+                  if z.getinfo('xl/sharedStrings.xml').file_size>48000000:raise ValueError('SHARED_STRINGS_SIZE_CAP')
+                  ss=ET.fromstring(z.read('xl/sharedStrings.xml'))
+                  shared=[''.join(t.text or '' for t in item.iter() if t.tag.endswith('}t'))[:350] for item in ss if item.tag.endswith('}si')]
+              files=sorted((q for q in z.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml',q)),key=lambda f:int(re.search('sheet([0-9]+)',f).group(1)))
+              audit=[]
+              for ix,fn in enumerate(files[:30]):
+                  nr=0;nc=0; rows=[]
+                  with z.open(fn) as stream:
+                      for event,el in ET.iterparse(stream,events=('end',)):
+                          if not el.tag.endswith('}row'):continue
+                          nr+=1; arr=[]
+                          for c in el:
+                              if not c.tag.endswith('}c'):continue
+                              nc+=1
+                              if nr>4:continue
+                              val=next((v.text for v in c if v.tag.endswith('}v')),None)
+                              if c.get('t')=='s' and val is not None:
+                                  try:val=shared[int(val)]
+                                  except (ValueError,IndexError):val='INVALID_SHARED_STRING_INDEX'
+                              elif c.get('t')=='inlineStr':val=''.join(t.text or '' for t in c.iter() if t.tag.endswith('}t'))
+                              if val is not None:arr.append({'cell':c.get('r'),'value':val[:230]})
+                          if nr<=4: rows.append(arr[:90])
+                          el.clear()
+                  audit.append({'sheet_name':sheets[ix] if ix<len(sheets) else fn,'row_count':nr,'nonempty_cell_count':nc,'source_first_4_rows':rows,'uncompressed_sheet_bytes':z.getinfo(fn).file_size})
+              report.update(status='OFFICIAL_PXD_PROCESSED_XLSX_SIZE_ZIP_CRC_PASS',bytes=len(content),sha256=hashlib.sha256(content).hexdigest(),md5=hashlib.md5(content).hexdigest(),zip_member_count=len(infos),sheet_count=len(sheets),sheet_titles=sheets,shared_string_count=len(shared),sheet_source_audit=audit)
+              (root/'proteinGroups_SILACLys_ModifArg_official_PXD000494.xlsx').write_bytes(content)
+              (root/'E105_PRIDE_processed_sheets_audit.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2)+'\n')
+          except Exception as e:report.update(status='SOURCE_DOWNLOAD_FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:250])
+          (root/'E105_PRIDE_processed_original_file_receipt.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          print('E105_PXD_ORIGINAL='+json.dumps(report,ensure_ascii=False)[:27000])
+          PY
+      - name: Keep one-day official PRIDE original and small QC
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e105-PRIDE-Lactococcus-processed-source
+          path: e105_pride_processed/
+          retention-days: 1
+          if-no-files-found: error
