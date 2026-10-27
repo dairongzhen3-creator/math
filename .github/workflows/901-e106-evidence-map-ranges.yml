@@ -1,0 +1,105 @@
+name: 901 E106 MaxQuant evidence exact RAW to Experiment map without large-archive download
+on:
+  push:
+    branches: ['cloud-public-sources-901-e106-20261027']
+    paths: ['.github/workflows/901-e106-evidence-map-ranges.yml']
+permissions: {}
+jobs:
+  two-phase-provenance:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Probe header first; download the evidence ZIP member ONLY if an Experiment column exists
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.parse,re,struct,zlib,pathlib,json,hashlib,collections,os,io,csv
+          out=pathlib.Path('e106_evidence_identity');out.mkdir()
+          url='https://ftp.pride.ebi.ac.uk/pride/data/archive/2014/01/PXD000494/txt.zip'
+          total=265589913; lo=23809847; compressed=15961380; size=91427130; crc_expected=int('0b8c93de',16)
+          rec={'study':'PXD000494','stage':'E106','provenance':'PRIDE original txt.zip central-directory entry verified previous run 40452543530','member':'txt/evidence.txt','member_original_uncompressed_bytes':size,'member_compressed_bytes':compressed,'known_zip_crc32':'0b8c93de','mode':'first 128KB header then conditional full compressed evidence member <=16MB; only 2 identifier fields saved','status':'NOT_RETRIEVED','source_range_log':[],'raw_exp_pairs':[]}
+          downloaded=0
+          def ranged(purpose,start,end,cap=18000000):
+              global downloaded
+              n=end-start+1
+              if n<=0 or n>cap or downloaded+n>17400000:raise ValueError('REQUEST_BYTE_CAP')
+              req=urllib.request.Request(url,headers={'Range':f'bytes={start}-{end}','User-Agent':'NoncommercialScientificIdentityAudit/1.0'})
+              with urllib.request.urlopen(req,timeout=55) as h:
+                  if h.status!=206:raise ValueError('SERVER_NOT_206_STATUS_'+str(h.status))
+                  if urllib.parse.urlsplit(h.url).hostname not in ('ftp.pride.ebi.ac.uk','ftp.ebi.ac.uk','www.ebi.ac.uk'):raise ValueError('UNEXPECTED_REDIRECT')
+                  rg=h.headers.get('Content-Range','')
+                  m=re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)',rg)
+                  if not m or (int(m[1]),int(m[2]),int(m[3]))!=(start,end,total):raise ValueError('BAD_CONTENT_RANGE_'+rg)
+                  b=h.read(n+1)
+                  if len(b)!=n:raise ValueError('BAD_BODY_LENGTH')
+              downloaded+=n
+              rec['source_range_log'].append({'purpose':purpose,'start':start,'end':end,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+              return b
+          try:
+              h=ranged('evidence_local_header',lo,lo+29,30)
+              vals=struct.unpack('<IHHHHHIIIHH',h)
+              if vals[0]!=0x04034b50 or vals[3] not in (0,8):raise ValueError('WRONG_LOCAL_HEADER')
+              flen,elen=vals[-2:]; fname=ranged('evidence_member_name',lo+30,lo+29+flen,256).decode('utf8','replace')
+              if fname!='txt/evidence.txt':raise ValueError('WRONG_FILENAME_'+fname)
+              start=lo+30+flen+elen
+              probe_n=131072
+              prefix=ranged('first_128KiB_evidence_deflate',start,start+probe_n-1,probe_n)
+              d=zlib.decompressobj(-15)
+              data=d.decompress(prefix)
+              if b'\n' not in data:raise ValueError('NO_HEADER_IN_PROBE')
+              cols=data.split(b'\n',1)[0].decode('utf8','replace').strip('\r').split('\t')
+              rec['evidence_header_columns']=cols
+              rec['header_has_raw_file']='Raw file' in cols
+              rec['header_has_experiment']='Experiment' in cols
+              rec['header_has_fraction']='Fraction' in cols
+              if 'Raw file' in cols and 'Experiment' in cols:
+                  rec['status']='EVIDENCE_HAS_EXPERIMENT_COLUMN_PROCEED_COMPLETE_VERIFIED_MAP'
+                  i_raw=cols.index('Raw file');i_exp=cols.index('Experiment');i_frac=cols.index('Fraction') if 'Fraction' in cols else None
+                  wanted=max(i_raw,i_exp,i_frac or 0)
+                  pending=b''; pairs=collections.Counter();rows=0; parse_bad=0; id_samples=[]
+                  uncompressed=0;crc=0
+                  def consume(s):
+                      nonlocal pending,rows,parse_bad,uncompressed,crc
+                      uncompressed+=len(s);crc=zlib.crc32(s,crc)
+                      pending+=s
+                      lines=pending.split(b'\n');pending=lines.pop()
+                      for line in lines:
+                          rows+=1
+                          if rows==1:continue
+                          col=line.rstrip(b'\r').split(b'\t')
+                          if len(col)<=wanted:parse_bad+=1;continue
+                          a=col[i_raw].decode('utf8','replace');b=col[i_exp].decode('utf8','replace')
+                          frac=col[i_frac].decode('utf8','replace') if i_frac is not None else ''
+                          pairs[(a,b,frac)]+=1
+                          if len(id_samples)<6:id_samples.append([a,b,frac])
+                  consume(data)
+                  nextpos=start+probe_n
+                  limit=start+compressed
+                  while nextpos<limit:
+                      stop=min(nextpos+524288,limit)
+                      part=ranged('compressed_evidence_segment',nextpos,stop-1,524288)
+                      clear=d.decompress(part)
+                      consume(clear)
+                      nextpos=stop
+                  if pending:rows+=1
+                  if not d.eof:raise ValueError('DEFLATE_END_NOT_CONFIRMED')
+                  if uncompressed!=size or crc!=crc_expected:raise ValueError('CRC_OR_UNCOMPRESSED_SIZE_MISMATCH')
+                  rec.update(bytes_inflated=uncompressed,crc_verified=True,actual_data_row_count=rows-1,parsed_rows=rows-1-parse_bad,parse_bad_rows=parse_bad,unique_raw_exp_fraction_tuples=len(pairs),examples=id_samples,raw_exp_pairs=[{'raw_file':key[0],'experiment':key[1],'fraction':key[2],'evidence_rows':n} for key,n in sorted(pairs.items())])
+                  with (out/'E106_raw_file_to_MaxQuant_experiment_from_published_evidence.csv').open('w',newline='',encoding='utf8') as f:
+                      writer=csv.DictWriter(f,fieldnames=['raw_file','experiment','fraction','evidence_rows']);writer.writeheader();writer.writerows(rec['raw_exp_pairs'])
+                  rec['status']='EVIDENCE_RAW_TO_EXPERIMENT_MAP_RECOVERED_AND_ZIP_CRC_VERIFIED'
+              else:
+                  rec.update(status='SOURCE_EVIDENCE_HEADER_LACKS_EXPERIMENT_NO_FULL_DOWNLOAD',header_prefix_sample=data[:2500].decode('utf8','replace'))
+          except Exception as e:
+              rec.update(status='SOURCE_FAIL_OR_REJECTED',error=type(e).__name__+': '+str(e)[:230])
+          rec['actual_HTTP_bytes_transferred']=downloaded
+          (out/'E106_evidence_header_or_full_map_receipt.json').write_text(json.dumps(rec,ensure_ascii=False,indent=2)+'\n')
+          print('E106_EVIDENCE_RESULT='+json.dumps({k:v for k,v in rec.items() if k not in ('evidence_header_columns','raw_exp_pairs','header_prefix_sample','source_range_log')},ensure_ascii=False)[:18000])
+          PY
+      - name: Archive only tiny verified metadata pairs, never full evidence or raw spectra
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e106-PXD-evidence-only-raw-to-experiment-map
+          path: e106_evidence_identity/
+          retention-days: 1
+          if-no-files-found: error
