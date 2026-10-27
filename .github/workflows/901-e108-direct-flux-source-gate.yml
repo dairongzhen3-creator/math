@@ -1,0 +1,144 @@
+name: 901 E108 independent same-culture protein synthesis and ATP source-gate
+on:
+  push:
+    branches: ['cloud-public-sources-901-e108-20261027']
+    paths: ['.github/workflows/901-e108-direct-flux-source-gate.yml']
+permissions: {}
+jobs:
+  e108-public-source:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: NLM/PLOS public source inventory and two BMC 2021 data Excel files, no raw sequencing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, urllib.request, urllib.parse, urllib.error, hashlib, json, io, zipfile, xml.etree.ElementTree as ET, re, os, collections
+          root=pathlib.Path('e108_official');root.mkdir()
+          S3='https://pmc-oa-opendata.s3.amazonaws.com/'
+          BMC='https://media.springernature.com/original/springer-static/esm/art%3A10.1186%2Fs12915-021-01023-2/MediaObjects/'
+          ALLOW={'pmc-oa-opendata.s3.amazonaws.com','media.springernature.com','static-content.springer.com','link.springer.com'}
+          receipt={'project':901,'stage':'E108','run_id':os.getenv('GITHUB_RUN_ID'),'scientific_boundary':'Measured ATP stock or simulated ATP flux is NOT directly measured hydrolysis; reporter GFP is NOT absolute proteome synthesis; treatment-level matching is NOT parent culture matching','sources':[],'studies':[],'workbooks':[],'max_total_bytes':7200000}
+          total=0
+          def fetch(label,url,limit,extension,kind='bytes'):
+              global total
+              rec={'label':label,'url':url,'status':'UNAVAILABLE','max_bytes':limit}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in ALLOW:raise ValueError('SOURCE_NOT_ALLOWLIST')
+                  req=urllib.request.Request(url,headers={'User-Agent':'NoncommercialScientificProvenance/1.0','Accept':'*/*'})
+                  with urllib.request.urlopen(req,timeout=42) as r:
+                      final=r.url
+                      if urllib.parse.urlsplit(final).hostname not in ALLOW:raise ValueError('UNACCEPTED_REDIRECT')
+                      lng=r.headers.get('Content-Length')
+                      if lng and int(lng)>limit:raise ValueError('CONTENT_LENGTH_OVER_LIMIT')
+                      raw=r.read(limit+1)
+                      rec.update(http=r.status,mime=(r.headers.get('Content-Type') or '')[:100],final_url=final)
+                  if len(raw)>limit or len(raw)<15:raise ValueError('BODY_LIMIT_OR_EMPTY')
+                  if raw[:220].lstrip().lower().startswith((b'<html',b'<!doctype html')):raise ValueError('HTML_CHALLENGE_NOT_DATA')
+                  if total+len(raw)>receipt['max_total_bytes']:raise ValueError('GLOBAL_DATA_LIMIT')
+                  if kind=='json': parsed=json.loads(raw)
+                  elif kind=='xlsx':
+                      if not raw.startswith(b'PK\x03\x04'):raise ValueError('NOT_XLSX_BINARY')
+                      parsed=zipfile.ZipFile(io.BytesIO(raw))
+                      if 'xl/workbook.xml' not in parsed.namelist():raise ValueError('INVALID_OOXML')
+                      if len(parsed.namelist())>200 or sum(x.file_size for x in parsed.infolist())>110000000:raise ValueError('DECOMPRESSION_CAP')
+                      if parsed.testzip():raise ValueError('ZIP_CRC_BAD')
+                  else:parsed=raw
+                  total+=len(raw)
+                  rec.update(status='OFFICIAL_SOURCE_VALID',bytes=len(raw),md5=hashlib.md5(raw).hexdigest(),sha256=hashlib.sha256(raw).hexdigest())
+                  (root/(label+extension)).write_bytes(raw)
+                  return rec,parsed
+              except Exception as e:
+                  rec.update(status='FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:200])
+                  return rec,None
+          metadata={}
+          for key,pmc,doi in (('BMC_ATP_reporter_2021','PMC8130387','10.1186/s12915-021-01023-2'),('PLOS_hypoxia_protein_synthesis_2015','PMC4537201','10.1371/journal.pone.0134955')):
+              study={'name':key,'pmc':pmc,'doi':doi,'source_status':'NOT_VERIFIED','media':[]}
+              for v in (1,2,3):
+                  label=key+'_NLM_v'+str(v)
+                  item,body=fetch(label,S3+'metadata/'+pmc+'.'+str(v)+'.json',350000,'.json','json')
+                  receipt['sources'].append(item)
+                  if isinstance(body,dict):
+                      if body.get('pmcid')==pmc and doi in str(body.get('doi')):
+                          study['source_status']='NLM_PUBLISHED_META_FOUND'
+                          study['version']=v
+                          study['publication_metadata_sha256']=item['sha256']
+                          items=[x if isinstance(x,str) else x.get('url','') for x in body.get('media_urls') or []]
+                          study['media']=[{'filename':urllib.parse.urlsplit(u).path.rsplit('/',1)[-1],'url':u} for u in items]
+                          metadata[key]=body
+                          break
+                      item['status']='WRONG_ARTICLE_ID'
+              study['media_count']=len(study['media'])
+              receipt['studies'].append(study)
+          # Select exactly the two published source data workbooks from BMC Biology 2021, once each.
+          target=('12915_2021_1023_MOESM15_ESM.xlsx','12915_2021_1023_MOESM16_ESM.xlsx')
+          urls=[BMC+n for n in target]
+          bmcmedia=metadata.get('BMC_ATP_reporter_2021',{}).get('media_urls') or []
+          expected={}
+          for v in bmcmedia:
+              u=v if isinstance(v,str) else v.get('url','')
+              for ix,n in enumerate(target):
+                  if n in u:
+                      if u.startswith('s3://pmc-oa-opendata/'): urls[ix]=S3+u.split('s3://pmc-oa-opendata/',1)[1]
+                      md5=re.search(r'[?&]md5=([0-9a-f]{32})',u)
+                      if md5:expected[n]=md5.group(1)
+          for ix,n in enumerate(target):
+              label='BMC2021_AdditionalFile'+str(15+ix)
+              item,z=fetch(label,urls[ix],1750000,'.xlsx','xlsx')
+              if z is None and urls[ix] != BMC+n:
+                  item['official_object_attempt_status']=item['status']
+                  item,z=fetch(label,BMC+n,1750000,'.xlsx','xlsx')
+              if z is not None:
+                  if n in expected:
+                      item['provider_md5']=expected[n]
+                      item['provider_md5_match']=(item['md5']==expected[n])
+                      if not item['provider_md5_match']:
+                          item['status']='REJECT_OFFICIAL_MD5_MISMATCH'
+                          (root/(label+'.xlsx')).unlink()
+                          z=None
+              if z is not None:
+                  sheetnames=[x.get('name') for x in ET.fromstring(z.read('xl/workbook.xml')).iter() if x.tag.endswith('}sheet')]
+                  ss=[]
+                  if 'xl/sharedStrings.xml' in z.namelist() and z.getinfo('xl/sharedStrings.xml').file_size<7000000:
+                      table=ET.fromstring(z.read('xl/sharedStrings.xml'))
+                      ss=[''.join(t.text or '' for t in x.iter() if t.tag.endswith('}t'))[:230] for x in table if x.tag.endswith('}si')]
+                  sheetfiles=sorted((f for f in z.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml',f)),key=lambda q:int(re.search(r'sheet(\d+)',q).group(1)))
+                  details=[]
+                  terms=['protein synthesis','translation','amino acid','peptide','atp','luciferase','reporter','power','consumption','hydrolysis','replicate','culture','sample','date','od600','glucose']
+                  for k,fn in enumerate(sheetfiles[:50]):
+                      nr=0;nc=0; first=[]; header_hits=collections.Counter()
+                      with z.open(fn) as h:
+                          for _,row in ET.iterparse(h,events=('end',)):
+                              if not row.tag.endswith('}row'):continue
+                              nr+=1; cur=[]
+                              for c in row:
+                                  if not c.tag.endswith('}c'):continue
+                                  nc+=1
+                                  if nr>6:continue
+                                  val=next((v.text for v in c if v.tag.endswith('}v')),None)
+                                  if c.get('t')=='s' and val is not None:
+                                      try:val=ss[int(val)]
+                                      except Exception:val='UNRESOLVED_SHARED_INDEX'
+                                  elif c.get('t')=='inlineStr':val=''.join(t.text or '' for t in c.iter() if t.tag.endswith('}t'))
+                                  if val is not None:
+                                      cur.append({'cell':c.get('r'),'value':str(val)[:125]})
+                                      for keyword in terms:
+                                          if keyword in str(val).lower():header_hits[keyword]+=1
+                              if nr<=6:first.append(cur[:28])
+                              row.clear()
+                      details.append({'sheet_name':sheetnames[k] if k<len(sheetnames) else fn,'rows':nr,'cells':nc,'top_six_rows':first,'first_rows_keyword_hit_count':dict(header_hits)})
+                  item.update(sheet_names=sheetnames,sheets=details)
+                  (root/(label+'_source_schema.json')).write_text(json.dumps(details,ensure_ascii=False,indent=2)+'\n')
+              receipt['workbooks'].append(item)
+          receipt['same_culture_author_approved_translation_aa_s_and_direct_ATP_flux_W_n']=0
+          receipt['new_direct_bit_per_joule']='NOT_IDENTIFIED'
+          (root/'E108_official_two_study_and_two_workbook_machine_source_receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+          print('E108_RESULT='+json.dumps({k:v for k,v in receipt.items() if k!='sources'},ensure_ascii=False)[:28000])
+          PY
+      - name: Preserve only two bounded official published source tables and metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e108-published-ATP-reporter-sources-and-paired-measurement-gate
+          path: e108_official/
+          retention-days: 1
+          if-no-files-found: error
