@@ -59,7 +59,7 @@ jobs:
                   pending=b''; pairs=collections.Counter();rows=0; parse_bad=0; id_samples=[]
                   uncompressed=0;crc=0
                   def consume(s):
-                      nonlocal pending,rows,parse_bad,uncompressed,crc
+                      global pending,rows,parse_bad,uncompressed,crc
                       uncompressed+=len(s);crc=zlib.crc32(s,crc)
                       pending+=s
                       lines=pending.split(b'\n');pending=lines.pop()
