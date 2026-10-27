@@ -1,0 +1,77 @@
+name: 901 E113 official Oxford publisher and NCBI PubMed data rescue
+on:
+  push:
+    branches: ['cloud-public-sources-901-e113-20261027']
+    paths: ['.github/workflows/901-e113-oxford-publisher-rescue.yml']
+permissions: {}
+jobs:
+  official:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Only exact public Oxford Plant Physiology 2017 source and NCBI official PubMed record
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,pathlib,urllib.request,urllib.parse,hashlib,re,json,xml.etree.ElementTree as ET,html.parser
+          root=pathlib.Path('e113_oxford_ncbi_public');root.mkdir()
+          records={'stage':'E113','run_id':os.getenv('GITHUB_RUN_ID'),'doi':'10.1104/pp.17.00610','pmid':'28615345','pmcid':'PMC5543967','official_attempts':[]}
+          allow={'academic.oup.com','oup.silverchair-cdn.com','www.plantphysiol.org','plantphysiol.org','eutils.ncbi.nlm.nih.gov','www.ncbi.nlm.nih.gov','www.ebi.ac.uk'}
+          attempts=[
+              ('Oxford_Article_Html','https://academic.oup.com/plphys/article/174/4/2261/6117444',2600000,'html'),
+              ('Oxford_OwnCDN_Minimal','https://oup.silverchair-cdn.com/article-minimal/6117444',2600000,'html'),
+              ('NCBI_Official_Pubmed28615345','https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=28615345&retmode=xml',450000,'xml'),
+              ('EBI_Official_BibliographicRecord','https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:28615345&format=json',450000,'json')
+          ]
+          for label,u,cap,kind in attempts:
+              rec={'label':label,'url':u,'status':'NOT_OBTAINED'}
+              try:
+                  req=urllib.request.Request(u,headers={'User-Agent':'NoncommercialArticleSourceReview/1.0','Accept':'text/html,application/xml,application/json'})
+                  with urllib.request.urlopen(req,timeout=36) as rsp:
+                      if urllib.parse.urlsplit(rsp.url).hostname not in allow:raise ValueError('SOURCE_OUTSIDE_ALLOWLIST')
+                      leng=rsp.headers.get('Content-Length')
+                      if leng and int(leng)>cap:raise ValueError('CONTENT_LENGTH_CAP')
+                      b=rsp.read(cap+1)
+                      rec.update(http=rsp.status,mime=rsp.headers.get('Content-Type'),redirected_url=rsp.url)
+                  if not 15<len(b)<=cap:raise ValueError('OUT_OF_BYTE_LIMIT')
+                  if kind=='xml':
+                      tree=ET.fromstring(b)
+                      pubmedtext=' '.join(tree.itertext())
+                      if '10.1104/pp.17.00610' not in pubmedtext:raise ValueError('WRONG_PMID_OR_DOI')
+                      rec['pubmed_doi_identity_verified']=True
+                      rec['pubmed_article_title']=next((''.join(n.itertext()) for n in tree.iter() if n.tag=='ArticleTitle'),'')[:280]
+                      rec['pubmed_abstract']=next((' '.join(n.itertext()) for n in tree.iter() if n.tag=='Abstract'),'')[:1000]
+                  if kind=='json':
+                      body=json.loads(b)
+                      if 'resultList' in body:
+                          rec['result_count']=len(body.get('resultList',{}).get('result',[]))
+                          rec['result_dois']=[r.get('doi') for r in body.get('resultList',{}).get('result',[])]
+                  if kind=='html':
+                      decoded=b.decode('utf8','replace')
+                      if '10.1104/pp.17.00610' not in decoded and 'Variation in Leaf Respiration Rates' not in decoded:
+                          raise ValueError('WRONG_HTML_OR_CHALLENGE')
+                      rec['contains_article_doi']=True
+                      rec['contains_key_methods']=any(x in decoded.lower() for x in ('leucine incorporation','leaf disc','respiration','protein synthesis'))
+                      rec['known_figure6_heading']=('Fig. 6' in decoded or 'Figure 6' in decoded)
+                      urls=re.findall(r'''(?:href|src)=["']([^"']{1,600})["']''',decoded,re.I)
+                      rec['asset_links']=[urllib.parse.urljoin(u,z)[:450] for z in urls if any(k in z.lower() for k in ('supp','figure-6','fig6','s001','s002','.xls','.csv','.zip','source-data'))][:50]
+                      rec['near_14c_leucine_snippets']=[decoded[max(0,m.start()-150):m.start()+400].replace('\n',' ')[:600] for m in list(re.finditer(r'leucine incorporation|\\[14c\\]leu|\\[<sup>14</sup>c',decoded,re.I))[:3]]
+                  rec.update(status='OFFICIAL_BYTES_RECEIVED_AND_IDENTITY_CHECKED',bytes=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest())
+                  (root/(label+'.'+kind)).write_bytes(b)
+              except Exception as e:rec.update(status='SOURCE_FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:200])
+              records['official_attempts'].append(rec)
+          records['paired_study_design_from_publisher']='published 14C-leucine incorporation plus oxygen consumption within leaf discs; paper reports n=24 mature leaves from different plants; no direct ATP hydrolysis'
+          records['biological_sample_raw_join_status']='NOT_MACHINE_CERTIFIED'
+          records['absolute_total_AA_rate_status']='RELATIVE_14C_L_LEU_PROXY_NOT_CALIBRATED_TOTAL_AA_PER_CELL_S'
+          records['ATP_status']='OXYGEN_CONSUMPTION_NOT_INDEPENDENT_ATP_HYDROLYSIS'
+          (root/'E113_official_Oxford_NCBI_evidence_receipt.json').write_text(json.dumps(records,indent=2,ensure_ascii=False)+'\n')
+          print('E113_OFFICIAL='+json.dumps({k:v for k,v in records.items() if k!='official_attempts'},ensure_ascii=False)[:1800])
+          print('E113_ITEMS='+json.dumps([{'label':v['label'],'status':v['status'],'bytes':v.get('bytes'),'err':v.get('error'),'links':v.get('asset_links',[])[:7]} for v in records['official_attempts']],ensure_ascii=False)[:7500])
+          PY
+      - name: Archive bounded publisher bytes and negative source proofs
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e113-official-oxford-pubmed-source-recovery
+          path: e113_oxford_ncbi_public/
+          retention-days: 1
+          if-no-files-found: error
