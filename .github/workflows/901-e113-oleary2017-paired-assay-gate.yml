@@ -1,0 +1,137 @@
+name: 901 E113 exact-source check paired Arabidopsis respiration+protein-incorporation
+on:
+  push:
+    branches: ['cloud-public-sources-901-e113-20261027']
+    paths: ['.github/workflows/901-e113-oleary2017-paired-assay-gate.yml']
+permissions: {}
+jobs:
+  e113:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Official NLM 2017 primary article and only bounded original supplementary sources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, urllib.request, urllib.parse, hashlib, json, zipfile, io, re, xml.etree.ElementTree as ET, collections, os
+          base='https://pmc-oa-opendata.s3.amazonaws.com/'
+          out=pathlib.Path('e113_oleary_originals');out.mkdir()
+          published='PMC5543967';doi='10.1104/pp.17.00610'
+          receipt={'stage':'E113','study':'OLeary et al Plant Physiology 2017 simultaneous leaf disc oxygen and 14C leucine incorporation','doi':doi,'pmc':published,'run':os.getenv('GITHUB_RUN_ID'),'sources':[],'attachments':[],'claimed_direct_ATP_hydrolysis_from_respirometry':False,'claim_status':'Source audit is NOT an approval of empirical J/AA or biological bit/J','verified_biological_parent_id_rows':0,'verified_absolute_total_AA_per_cell_s_rows':0,'verified_direct_ATP_hydrolysis_per_cell_s_rows':0}
+          total=0;MAX_TOTAL=5500000;ua='NoncommercialScientificOriginalSourceVerification/1.0'
+          def fetch(label,url,cap,kind):
+              global total
+              rec={'label':label,'url':url,'limit_bytes':cap,'status':'SOURCE_UNAVAILABLE'}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in ('pmc-oa-opendata.s3.amazonaws.com','www.ebi.ac.uk'):raise ValueError('BAD_HOST')
+                  req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
+                  with urllib.request.urlopen(req,timeout=37) as res:
+                      if urllib.parse.urlsplit(res.url).hostname not in ('pmc-oa-opendata.s3.amazonaws.com','www.ebi.ac.uk'):raise ValueError('BAD_REDIRECT')
+                      leng=res.headers.get('Content-Length')
+                      if leng and int(leng)>cap:raise ValueError('SOURCE_OVER_LIMIT')
+                      blob=res.read(cap+1);rec.update(http=res.status,content_type=(res.headers.get('Content-Type') or '')[:100])
+                  if len(blob)>cap or len(blob)<20:raise ValueError('BODY_LENGTH')
+                  if blob[:120].lower().lstrip().startswith((b'<html',b'<!doctype html')) and kind in ('xml','json','xlsx','zip'):raise ValueError('HTML_NOT_DATA')
+                  if total+len(blob)>MAX_TOTAL:raise ValueError('GLOBAL_SOURCE_CAP')
+                  obj=json.loads(blob) if kind=='json' else ET.fromstring(blob) if kind=='xml' else None
+                  if kind=='xlsx':
+                      if not blob.startswith(b'PK\x03\x04'):raise ValueError('XLSX_BAD_MAGIC')
+                      z=zipfile.ZipFile(io.BytesIO(blob))
+                      if 'xl/workbook.xml' not in z.namelist() or z.testzip():raise ValueError('XLSX_BAD_CRC')
+                      if sum(q.file_size for q in z.infolist())>70000000:raise ValueError('DECOMPRESS_CAP')
+                      rec['sheets']=[e.get('name') for e in ET.fromstring(z.read('xl/workbook.xml')).iter() if e.tag.endswith('}sheet')]
+                  if kind=='pdf' and not blob.startswith(b'%PDF-'):raise ValueError('PDF_BAD_MAGIC')
+                  if kind=='zip':
+                      z=zipfile.ZipFile(io.BytesIO(blob))
+                      if z.testzip() or sum(q.file_size for q in z.infolist())>75000000:raise ValueError('ZIP_BAD_CRC_OR_SIZE')
+                      rec['zip_member_names']=[e.filename for e in z.infolist()][:55]
+                  total+=len(blob)
+                  rec.update(status='OFFICIAL_ORIGINAL_BYTES_PASS',bytes=len(blob),sha256=hashlib.sha256(blob).hexdigest(),md5=hashlib.md5(blob).hexdigest())
+                  (out/(label+'.'+kind)).write_bytes(blob)
+                  return rec,obj
+              except Exception as e:
+                  rec.update(status='SOURCE_NOT_RETRIEVED',error_type=type(e).__name__,error=str(e)[:240]);return rec,None
+          meta=None;ver=None;tree=None
+          for v in (1,2,3):
+              i,m=fetch('NLM_PMC5543967_meta_v'+str(v),base+'metadata/'+published+'.'+str(v)+'.json',200000,'json')
+              receipt['sources'].append(i)
+              if isinstance(m,dict) and m.get('pmcid')==published and doi in str(m.get('doi')):
+                  meta=m;ver=v;break
+          if meta is not None:
+              receipt['archive_version']=ver
+              receipt['published_media']=meta.get('media_urls',[])
+              receipt['media_count']=len(meta.get('media_urls',[]))
+              src=meta.get('xml_url','')
+              if isinstance(src,str) and src.startswith('s3://pmc-oa-opendata/'):
+                  src=base+src.split('s3://pmc-oa-opendata/',1)[1]
+              if not isinstance(src,str) or not src.startswith(base):
+                  src=base+f'{published}.{ver}/{published}.{ver}.xml'
+              i,tree=fetch('NLM_PMC5543967_JATS',src,1350000,'xml')
+              receipt['sources'].append(i)
+          if tree is None:
+              i,tree=fetch('EBI_PMC5543967_official_FullTextXML','https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5543967/fullTextXML',1350000,'xml')
+              receipt['sources'].append(i)
+          if tree is not None:
+              ids=[(p.get('pub-id-type',''),''.join(p.itertext()).strip()) for p in tree.iter() if p.tag.rsplit('}',1)[-1]=='article-id']
+              receipt['article_ids']=ids
+              assert ('doi',doi) in ids and ('pmcid',published) in ids or ('pmc','5543967') in ids and ('doi',doi) in ids
+              count=collections.Counter(e.tag.rsplit('}',1)[-1] for e in tree.iter())
+              receipt['counts']={k:count[k] for k in ('table-wrap','fig','supplementary-material','media','table')}
+              figures=[]
+              for f in tree.iter():
+                  if f.tag.rsplit('}',1)[-1]!='fig':continue
+                  lab=next((' '.join(''.join(e.itertext()).split()) for e in f if e.tag.rsplit('}',1)[-1]=='label'),'')
+                  cap=next((' '.join(''.join(e.itertext()).split()) for e in f if e.tag.rsplit('}',1)[-1]=='caption'),'')
+                  if '6' in lab or ('protein' in cap.lower() and 'oxygen' in cap.lower()):
+                      figures.append({'label':lab,'caption':cap[:2800]})
+              receipt['relevant_figure_captions']=figures[:7]
+              paragraphs=[]
+              for p in tree.iter():
+                  if p.tag.rsplit('}',1)[-1]!='p':continue
+                  txt=' '.join(''.join(p.itertext()).split())
+                  if any(t in txt.lower() for t in ('simultaneous measure','simultaneously', 'leu incorporation','leucine incorporation','24 mature', 'different plants','raw data','supplemental table','available upon')):
+                      paragraphs.append(txt[:1500])
+              receipt['selected_method_paragraphs']=paragraphs[:22]
+              supp=[]
+              for e in tree.iter():
+                  if e.tag.rsplit('}',1)[-1] in ('supplementary-material','media'):
+                      href=next((v for k,v in e.attrib.items() if k.endswith('href')),None)
+                      supp.append({'type':e.tag.rsplit('}',1)[-1],'id':e.get('id'),'filename':href,'summary':' '.join(''.join(e.itertext()).split())[:350]})
+              receipt['jats_supplement_references']=supp[:45]
+              receipt['fulltext_id_verified']=True
+          # Only author media listed as supplementary, max 4 bounded files under 2MB each.
+          if meta is not None:
+              targets=[]
+              for obj in meta.get('media_urls',[]):
+                  url=obj if isinstance(obj,str) else obj.get('url','')
+                  if url.startswith('s3://pmc-oa-opendata/'):
+                      url=base+url.split('s3://pmc-oa-opendata/',1)[1]
+                  if not url.startswith(base):continue
+                  path=urllib.parse.urlsplit(url).path.rsplit('/',1)[-1]
+                  if re.search(r'(\.xlsx?$|\.csv$|\.tsv$|\.pdf$|\.zip$|\.txt$)',path,re.I):
+                      targets.append((path,url))
+              receipt['supplement_candidates']=[p for p,_ in targets]
+              for k,(name,url) in enumerate(targets[:4]):
+                  kind=name.rsplit('.',1)[-1].lower()
+                  if kind=='xls':continue
+                  kind='xlsx' if kind in ('xlsx',) else kind
+                  rec,_=fetch('NLM_official_supplement_'+str(k),url,1800000,kind)
+                  m=re.search(r'[?&]md5=([0-9a-f]{32})',url)
+                  if m and rec['status']=='OFFICIAL_ORIGINAL_BYTES_PASS':
+                      rec['declared_original_md5']=m.group(1)
+                      rec['provider_md5_match']=rec['md5']==m.group(1)
+                      if not rec['provider_md5_match']:
+                          rec['status']='REJECT_AUTHOR_ORIGINAL_MD5_MISMATCH'
+                          (out/('NLM_official_supplement_'+str(k)+'.'+kind)).unlink()
+                  receipt['attachments'].append(rec)
+          receipt['science_status']='PAIRED_TISSUE_RESPIRATION_AND_LEUCINE_INCORPORATION_PUBLISHED; NOT_VERIFIED_ATP_HYDROLYSIS_OR_ABSOLUTE_TOTAL_AA_OR_MACHINE_PARENT_MAP'
+          (out/'E113_official_source_and_pairing_gate_receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+          print('E113_RESULT='+json.dumps({k:v for k,v in receipt.items() if k not in ('published_media','selected_method_paragraphs','relevant_figure_captions','jats_supplement_references')},ensure_ascii=False)[:13000])
+          PY
+      - name: Archive only small official sources for reproducible intake
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e113-oleary2017-original-JATS-and-supplement-eligibility
+          path: e113_oleary_originals/
+          retention-days: 1
+          if-no-files-found: error
