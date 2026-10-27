@@ -1,0 +1,83 @@
+name: 901 E113 bounded publisher and PubMed alternatives for OLeary 2017
+on:
+  push:
+    branches: ['cloud-public-sources-901-e113-20261027']
+    paths: ['.github/workflows/901-e113-official-source-recovery.yml']
+permissions: {}
+jobs:
+  author-official-sources:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: One bounded official metadata/fulltext/supplement discovery with explicit failure receipt
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.parse,xml.etree.ElementTree as ET,json,hashlib,re,html.parser,os
+          root=pathlib.Path('e113_official_recovery');root.mkdir()
+          urls=[
+           ('PubMed_NCBI_28615345_XML','https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=28615345&retmode=xml',450000,'xml'),
+           ('EuropePMC_28615345_Json','https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A28615345%20AND%20SRC%3AMED&format=json',250000,'json'),
+           ('NLM_OA_API','https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id=PMC5543967',120000,'xml'),
+           ('NLM_BioC_Public_Xml','https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_xml/PMC5543967/unicode',800000,'xml'),
+           ('EBI_EuropePMC_fullTextXML','https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5543967/fullTextXML',1200000,'xml'),
+           ('EBI_supplementaryFiles','https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5543967/supplementaryFiles',1600000,'binary'),
+           ('OUP_Article_Official_HTML','https://academic.oup.com/plphys/article/174/4/2261/6117444',1700000,'html'),
+           ('OUP_Article_Fig6_Supplement','https://academic.oup.com/plphys/article/174/4/2261/6117444#supplementary-data',1700000,'html'),
+          ]
+          approved={'eutils.ncbi.nlm.nih.gov','www.ebi.ac.uk','www.ncbi.nlm.nih.gov','academic.oup.com','oup.silverchair-cdn.com','www.oupcdn.com'}
+          total=0;grand_cap=3700000;records=[]
+          class Links(html.parser.HTMLParser):
+              def __init__(self):super().__init__();self.attrs=[];self.active=False;self.href='';self.buf=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=='a':self.active=True;self.href=dict(attrs).get('href','');self.buf=[]
+              def handle_data(self,s):
+                  if self.active:self.buf.append(s)
+              def handle_endtag(self,tag):
+                  if tag=='a' and self.active:
+                      text=' '.join(' '.join(self.buf).split())
+                      if re.search(r'supp|data|material|figure|download|original|source',self.href+' '+text,re.I):
+                          self.attrs.append({'name':text[:120],'href':urllib.parse.urljoin('https://academic.oup.com/',self.href)[:360]})
+                      self.active=False
+          for name,url,cap,typ in urls:
+              r={'name':name,'url':url,'status':'NOT_RETRIEVED'}
+              try:
+                  if urllib.parse.urlsplit(url).hostname not in approved:raise ValueError('HOST_NOT_WHITELISTED')
+                  req=urllib.request.Request(url,headers={'User-Agent':'ResearchArchivalProvenanceReadOnly/1.0','Accept':'application/xml, application/json, text/html, */*'})
+                  with urllib.request.urlopen(req,timeout=20) as res:
+                      if urllib.parse.urlsplit(res.url).hostname not in approved:raise ValueError('REDIRECT_DOMAIN_UNTRUSTED')
+                      length=res.headers.get('Content-Length')
+                      if length and int(length)>cap:raise ValueError('BODY_OVER_CAP_BY_HEADER')
+                      b=res.read(cap+1)
+                      r.update(http=res.status,content_type=(res.headers.get('Content-Type') or '')[:85],final_url=res.url[:270])
+                  if len(b)<15 or len(b)>cap or total+len(b)>grand_cap:raise ValueError('SOURCE_BYTE_CAP')
+                  if typ=='xml':doc=ET.fromstring(b)
+                  if typ=='json':doc=json.loads(b)
+                  if typ=='html':
+                      if b'<html' not in b[:2000].lower():raise ValueError('NOT_HTML')
+                      parser=Links();parser.feed(b.decode('utf8','replace'));r['supplement_links']=parser.attrs[:40]
+                  if typ=='binary' and (b[:30].lstrip().lower().startswith(b'<html')):raise ValueError('HTML_IS_NOT_SUPPLEMENT')
+                  r.update(status='OFFICIAL_SOURCE_BYTES_RECEIVED',bytes=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest())
+                  if typ=='xml':
+                      ids=[(el.get('IdType') or el.get('pub-id-type') or '', ''.join(el.itertext()).strip()[:50]) for el in doc.iter() if el.tag.rsplit('}',1)[-1] in ('ArticleId','article-id')]
+                      r['article_id_list']=ids[:30]
+                      r['article_identity_doi_verified']=any(v=='10.1104/pp.17.00610' for _,v in ids)
+                  if typ=='json':
+                      data=doc.get('resultList',{}).get('result',[]) if isinstance(doc,dict) else []
+                      r['record_dois']=[x.get('doi') for x in data][:5];r['hit_count']=len(data)
+                  if typ=='binary':r['magic']=b[:12].hex()
+                  (root/(name+'.'+{'binary':'bin'}.get(typ,typ))).write_bytes(b)
+                  total+=len(b)
+              except Exception as e:r.update(status='SOURCE_FAILED_OR_REJECTED',error_type=type(e).__name__,error=str(e)[:220])
+              records.append(r)
+          manifest={'stage':'E113','study':'OLeary2017 10.1104/pp.17.00610','NLM_PMC5543967_original_recovery':'attempted PMC OA metadata versions 1/2/3 all 404, Europe PMC JATS 500 in earlier workflow 40522377202','this_bounded_search':records,'strict_eligibility':'NO_RAW_BIOSAMPLE_PARENT_TIMESTAMPS_AND_NO_DIRECT_ATP_HYDROLYSIS','new_certified_real_culture_joint_n':0}
+          (root/'E113_official_failed_and_successful_source_receipt.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          print('E113_RECOVERY='+json.dumps({'records':[{'name':r['name'],'status':r['status'],'http':r.get('http'),'bytes':r.get('bytes'),'error':r.get('error'),'id_verified':r.get('article_identity_doi_verified'),'hit_count':r.get('hit_count'),'links':r.get('supplement_links',[])[:12]} for r in records]},ensure_ascii=False)[:17000])
+          PY
+      - name: Archive source bytes and exact failure statuses
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e113-official-publisher-NLM-PubMed-alternate-metadata
+          path: e113_official_recovery/
+          retention-days: 1
+          if-no-files-found: error
