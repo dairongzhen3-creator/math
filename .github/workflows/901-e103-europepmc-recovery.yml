@@ -1,0 +1,62 @@
+name: 901 E103 Europe PMC bounded full-text XML recovery for older articles
+on:
+  push:
+    branches: ['cloud-public-sources-901-e103-20261027']
+    paths: ['.github/workflows/901-e103-europepmc-recovery.yml']
+permissions: {}
+jobs:
+  published-originals:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch two exact Europe PMC XML sources and verify article identity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.parse,json,hashlib,xml.etree.ElementTree as ET,os
+          d=pathlib.Path('e103_europepmc_verified');d.mkdir()
+          studies=[('Kempes2017','PMC5686401','10.1098/rsta.2016.0343'),('Ignatova2018','PMC6032113','10.1152/jn.00017.2018')]
+          result={'stage':'E103','scope':'Only two official Europe PMC fullTextXML, no images or raw experiments','run':os.getenv('GITHUB_RUN_ID'),'studies':[]}
+          for label,pmc,doi in studies:
+              url='https://www.ebi.ac.uk/europepmc/webservices/rest/'+pmc+'/fullTextXML'
+              row={'label':label,'pmc':pmc,'doi_expected':doi,'url':url,'status':'NOT_OBTAINED'}
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':'NoncommercialScientificSourceAudit/1.0','Accept':'application/xml'})
+                  with urllib.request.urlopen(req,timeout=40) as rsp:
+                      if urllib.parse.urlsplit(rsp.url).hostname!='www.ebi.ac.uk':raise ValueError('BAD_REDIRECT')
+                      b=rsp.read(1300001)
+                      row['http']=rsp.status
+                      row['content_type']=(rsp.headers.get('Content-Type') or '')[:90]
+                  if len(b)<100 or len(b)>1300000:raise ValueError('BODY_BOUND')
+                  root=ET.fromstring(b)
+                  ids=[(x.get('pub-id-type'),''.join(x.itertext()).strip()) for x in root.iter() if x.tag.rsplit('}',1)[-1]=='article-id']
+                  if (('pmc',pmc.replace('PMC','')) not in ids) or (('doi',doi) not in ids):raise ValueError('PAPER_ID_NOT_MATCHING_EXPECTED')
+                  count={}
+                  for e in root.iter():
+                      k=e.tag.rsplit('}',1)[-1];count[k]=count.get(k,0)+1
+                  refs=[]
+                  for el in root.iter():
+                      if el.tag.rsplit('}',1)[-1] in ('supplementary-material','supplement','ext-link','media'):
+                          href=next((v for k,v in el.attrib.items() if k.endswith('href')),None)
+                          if href:refs.append({'tag':el.tag.rsplit('}',1)[-1],'name':href[:200]})
+                  scopes=[]
+                  for e in root.iter():
+                      if e.tag.rsplit('}',1)[-1] != 'p':continue
+                      s=' '.join(''.join(e.itertext()).split())
+                      if any(t in s.lower() for t in ('47.7', 'four atp', '12 atp','1.24', '5.74','cells for each', 'voltage response', 'data availability','data accessibility')):
+                          scopes.append(s[:540])
+                  row.update(status='OFFICIAL_EUROPEPMC_XML_PASS',size=len(b),sha256=hashlib.sha256(b).hexdigest(),md5=hashlib.md5(b).hexdigest(),article_ids=ids,counts={k:count.get(k,0) for k in ('fig','table-wrap','supplementary-material','media','table')},links=refs[:30],selected_paragraphs=scopes[:25])
+                  (d/(label+'_EuropePMC_original_fullTextXML.xml')).write_bytes(b)
+              except Exception as e:
+                  row.update(status='UNAVAILABLE_OR_FAILED',error_type=type(e).__name__,error=str(e)[:180])
+              result['studies'].append(row)
+          (d/'E103_EuropePMC_fulltext_source_receipt.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          print('E103_EBI_RECEIPT='+json.dumps(result,ensure_ascii=False)[:29000])
+          PY
+      - name: Save one-day author XML provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e103-europepmc-official-xml-proof
+          path: e103_europepmc_verified/
+          retention-days: 1
+          if-no-files-found: error
