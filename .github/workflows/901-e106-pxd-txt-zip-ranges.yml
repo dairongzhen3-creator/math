@@ -1,0 +1,97 @@
+name: 901 E106 bounded PRIDE MaxQuant TXT ZIP index and small sample-map recovery
+on:
+  push:
+    branches: ['cloud-public-sources-901-e106-20261027']
+    paths: ['.github/workflows/901-e106-pxd-txt-zip-ranges.yml']
+permissions: {}
+jobs:
+  small-range-archive:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Read only ZIP EOCD and central directory via HTTP206; inspect at most 5 small text metadata members
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.parse,re,struct,zlib,pathlib,hashlib,json,os
+          root=pathlib.Path('e106_pxd_limited_metadata');root.mkdir()
+          url='https://ftp.pride.ebi.ac.uk/pride/data/archive/2014/01/PXD000494/txt.zip'
+          pubsize=265589913
+          rec={'stage':'E106','study':'PRIDE PXD000494','source_url':url,'official_manifest_zip_size':pubsize,'scope':'HTTP206 ZIP central directory and <=5 selected small MaxQuant text members; NO full 265MB archive download, NO mass spectrometry RAW','status':'NOT_OBTAINED','range_requests':[],'file_manifest':[],'extracted_members':[],'archive_raw_bytes_downloaded':0,'experiment_to_raw_mapping_status':'NOT_CERTIFIED'}
+          total_limit=2500000
+          def rget(name,start,end,cap):
+              if not (0<=start<=end<pubsize):raise ValueError('INVALID_BYTE_RANGE')
+              n=end-start+1
+              if n>cap or rec['archive_raw_bytes_downloaded']+n>total_limit:raise ValueError('BYTE_BUDGET')
+              headers={'User-Agent':'NoncommercialScientificSourceVerification/1.0','Range':f'bytes={start}-{end}'}
+              with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=40) as h:
+                  status=h.status
+                  cont=h.headers.get('Content-Range','')
+                  actual=h.url
+                  if urllib.parse.urlsplit(actual).hostname not in ('ftp.pride.ebi.ac.uk','ftp.ebi.ac.uk','www.ebi.ac.uk'):raise ValueError('HOST_CHANGED')
+                  if status!=206:raise ValueError('RANGE_NOT_HONORED_HTTP_'+str(status))
+                  m=re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)',cont)
+                  if not m or (int(m[1]),int(m[2]),int(m[3]))!=(start,end,pubsize):raise ValueError('CONTENT_RANGE_MISMATCH_'+cont[:130])
+                  b=h.read(cap+1)
+                  if len(b)!=n:raise ValueError('TRUNCATED_OR_OVER_RESPONSE')
+                  rec['archive_raw_bytes_downloaded']+=n
+                  rec['range_requests'].append({'purpose':name,'start':start,'end':end,'bytes':len(b),'status':status,'sha256':hashlib.sha256(b).hexdigest()})
+                  return b
+          try:
+              tail=rget('ZIP_EOCD',pubsize-65536,pubsize-1,65536)
+              offset=tail.rfind(b'PK\x05\x06')
+              if offset<0:raise ValueError('EOCD_NOT_FOUND')
+              eocd=tail[offset:offset+22]
+              if len(eocd)<22:raise ValueError('TRUNC_EOCD')
+              sig,disk,startdisk,n_this,n_total,cdsize,cdoffset,comment=struct.unpack('<IHHHHIIH',eocd)
+              if (disk,startdisk,n_this,n_total)!=(0,0,n_total,n_total) or n_total>150 or cdsize>500000 or cdoffset==0xffffffff or cdsize==0xffffffff:raise ValueError('NOT_SUPPORTED_SIMPLE_ZIP')
+              cd=rget('ZIP_CENTRAL_DIRECTORY',cdoffset,cdoffset+cdsize-1,500000)
+              entries=[];pos=0
+              for index in range(n_total):
+                  if cd[pos:pos+4]!=b'PK\x01\x02':raise ValueError('CENTRAL_SIGNATURE_MISSING_AT_'+str(pos))
+                  vals=struct.unpack_from('<IHHHHHHIIIHHHHHII',cd,pos)
+                  sign,vm,vn,flags,compression,mtime,mdate,crc,cs,us,nflen,exlen,clen,ds,ia,ea,lo=vals
+                  rawname=cd[pos+46:pos+46+nflen]
+                  name=rawname.decode('utf8' if flags&2048 else 'cp437','replace')
+                  if name.startswith('/') or '..' in pathlib.PurePosixPath(name).parts:raise ValueError('UNSAFE_MEMBER_PATH')
+                  entries.append({'file':name,'uncompressed_bytes':us,'compressed_bytes':cs,'method':compression,'crc32_hex':f'{crc:08x}','local_header_offset':lo,'flags':flags})
+                  pos+=46+nflen+exlen+clen
+              if pos!=len(cd):raise ValueError('CENTRAL_SIZE_MISMATCH')
+              rec.update(status='PUBLISHED_ZIP_INDEX_206_SUCCESS',member_count=len(entries),file_manifest=entries)
+              candidates=[]
+              for item in entries:
+                  label=item['file'].lower()
+                  if item['uncompressed_bytes']<=700000 and item['compressed_bytes']<=700000 and item['method'] in (0,8):
+                      if any(x in label for x in ('experimentaldesign','summary.txt','parameters.txt','mqpar.xml','design','sample','metadata','evidence_header','msmsfile')):
+                          if label.endswith(('.txt','.xml','.csv','.tsv')):candidates.append(item)
+              candidates=sorted(candidates,key=lambda x:(not any(s in x['file'].lower() for s in ('design','summary','parameters')),x['uncompressed_bytes']))
+              rec['safe_metadata_candidates']=[{k:item[k] for k in ('file','uncompressed_bytes','compressed_bytes')} for item in candidates]
+              for i,item in enumerate(candidates[:5]):
+                  lo=item['local_header_offset']
+                  h=rget('member_'+str(i)+'_local_header',lo,lo+29,30)
+                  vals=struct.unpack('<IHHHHHIIIHH',h)
+                  if vals[0]!=0x04034b50:raise ValueError('NOT_LOCAL_HEADER')
+                  flen,elen=vals[-2:]
+                  co=lo+30+flen+elen
+                  csize=item['compressed_bytes']
+                  if csize<1:continue
+                  blob=rget('member_'+str(i)+'_compressed_bytes',co,co+csize-1,700000)
+                  clear=zlib.decompress(blob,-15) if item['method']==8 else blob
+                  if len(clear)!=item['uncompressed_bytes'] or zlib.crc32(clear)!=int(item['crc32_hex'],16):raise ValueError('MEMBER_CRC_OR_SIZE_MISMATCH')
+                  if b'\x00' in clear[:256]:raise ValueError('NON_TEXT_MEMBER_REJECTED')
+                  path=root/('E106_publisher_MaxQuant_meta_'+str(i)+'_'+pathlib.PurePosixPath(item['file']).name)
+                  path.write_bytes(clear)
+                  rec['extracted_members'].append({'archive_name':item['file'],'saved_name':path.name,'bytes':len(clear),'sha256':hashlib.sha256(clear).hexdigest(),'text_head':clear[:3500].decode('utf8','replace')})
+              rec['experiment_to_raw_mapping_status']='REQUIRES_EXPLICIT_META_FIELD_AND_PARENT_CULTURE_AUTHORIZATION'
+          except Exception as ex:
+              rec.update(status='OFFICIAL_SOURCE_RANGE_FAILURE_OR_REJECTED',error_type=type(ex).__name__,error=str(ex)[:220])
+          (root/'E106_PXD000494_bounded_ZIP_directory_and_metadata_receipt.json').write_text(json.dumps(rec,ensure_ascii=False,indent=2)+'\n')
+          print('E106_ZIP_INDEX='+json.dumps({k:v for k,v in rec.items() if k!='file_manifest'},ensure_ascii=False)[:24000])
+          PY
+      - name: Preserve small public index for transfer, retention one day
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e106-official-PRIDE-ZIP-central-directory-and-metadata
+          path: e106_pxd_limited_metadata/
+          retention-days: 1
+          if-no-files-found: error
