@@ -1,0 +1,62 @@
+name: "901 E116 exact XLSX measurement gate"
+on:
+  push:
+    paths: ['.github/workflows/901-e116-deep-sheet-gate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Inspect original public Excel and tomato v3 names without executing source scripts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import io,os,urllib.request,zipfile,hashlib,json,subprocess,sys,re
+          from collections import Counter
+          from pathlib import Path
+          try:
+              import openpyxl
+          except ImportError:
+              subprocess.check_call([sys.executable,'-m','pip','install','--quiet','openpyxl==3.1.5'])
+              import openpyxl
+          def retrieve(url,maxbytes,md5):
+              req=urllib.request.Request(url,headers={'User-Agent':'901-E116-method-audit'})
+              with urllib.request.urlopen(req,timeout=60) as u:
+                  b=u.read(maxbytes+1)
+              assert len(b)<=maxbytes,(len(b),maxbytes)
+              assert hashlib.md5(b).hexdigest()==md5,'MD5_MISMATCH'
+              return b
+          report={'stage':'E116','execution':'original_xlsx_read_only','third_party_source_scripts_executed':False}
+          raw=retrieve('https://zenodo.org/records/19386720/files/Supplementary%20data%20and%20code.zip?download=1',14000000,'9ceba7a9ad2c868eaa9ef422e50f091e')
+          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+              k=[n for n in z.namelist() if n.endswith('plant_data.xlsx')]
+              assert len(k)==1,k
+              b=z.read(k[0]);report['lettuce_xlsx']={'filename':k[0],'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
+              book=openpyxl.load_workbook(io.BytesIO(b),read_only=True,data_only=True)
+              meta=[]
+              for sheet in book.worksheets:
+                  cols=list(sheet.iter_rows(min_row=1,max_row=3,values_only=True))
+                  head=list(cols[0]) if cols else []
+                  candidate=[{'index':i,'name':str(v)[:110]} for i,v in enumerate(head) if v is not None and re.search('plant|time|second|hour|day|group|treat|stress|label|biomarker|voltage|signal|sensor|current|outcome|water|chlorophyll|potential|control|class|sample|exp|acid|salt|electro',str(v),flags=re.I)]
+                  meta.append({'sheet':sheet.title,'max_rows':sheet.max_row,'max_columns':sheet.max_column,'first_three_rows':[[str(v)[:80] if v is not None else None for v in r[:22]] for r in cols],'candidate_columns':candidate[:70]})
+              book.close()
+              report['lettuce_xlsx']['sheets']=meta
+          raw=retrieve('https://zenodo.org/records/22081982/files/2_class_classification_results.zip?download=1',300000,'69197aabc0bd93136ff9f0fc82a364fb')
+          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+              members=[m.filename for m in z.infolist() if not m.is_dir() and not m.filename.startswith('__MACOSX') and not m.filename.endswith(('.DS_Store','#'))]
+              rawc=[s for s in members if re.search('raw|voltage|plant_data|signal|waveform|timeseries|time_series',s,re.I)]
+              report['tomato_v3']={'member_count':len(members),'members':members[:140],'raw_signal_named_files':rawc}
+          Path('901_e116_deep_sheet_gate.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('E116_XLSX_GATE',json.dumps(report,ensure_ascii=False)[:15500],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E116-deep-sheet-gate
+          path: 901_e116_deep_sheet_gate.json
+          retention-days: 7
+          if-no-files-found: warn
