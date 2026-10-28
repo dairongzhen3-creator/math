@@ -1,0 +1,30 @@
+name: 901 E116 plant held-out biomarker forecast
+on:
+  push:
+    paths:
+      - '.github/workflows/901-e116-biomarker-heldout.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pilot:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            research_901/E116_electrochemical_future_biomarker_pilot.py
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Recalculate 60 plant real published electrochemical data, test held-out plants
+        run: python3 research_901/E116_electrochemical_future_biomarker_pilot.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E116-plant-heldout-evaluation
+          path: 901_e116_pilot_results.json
+          if-no-files-found: warn
+          retention-days: 7
