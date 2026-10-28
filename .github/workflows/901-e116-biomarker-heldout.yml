@@ -28,3 +28,4 @@ jobs:
           path: 901_e116_pilot_results.json
           if-no-files-found: warn
           retention-days: 7
+# 2026-10-28 corrected grouped key: Group + Plant_ID (six groups share local IDs)
