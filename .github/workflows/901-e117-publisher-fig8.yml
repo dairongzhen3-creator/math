@@ -1,0 +1,26 @@
+name: 901 E117 official Nature publisher source-data audit
+on:
+  push:
+    paths: ['.github/workflows/901-e117-publisher-fig8.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E117_publisher_fig8_source_audit.py
+          persist-credentials: false
+      - run: python3 research_901/E117_publisher_fig8_source_audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E117-Nature-Electronics-Official-Source-Data
+          path: 901_E117_publisher_source_xlsx_gate.json
+          retention-days: 7
+          if-no-files-found: warn
