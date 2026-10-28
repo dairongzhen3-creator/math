@@ -26,3 +26,5 @@ jobs:
             901_E117_ED8c_37_observations.csv
           retention-days: 7
           if-no-files-found: warn
+
+# E117 rerun: official XLSX shared-string label decoding correction (previous source run retained)
