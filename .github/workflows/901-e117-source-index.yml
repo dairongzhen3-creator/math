@@ -1,0 +1,26 @@
+name: 901 E117 bound publisher source links and ivy archive index
+on:
+  push:
+    paths: ['.github/workflows/901-e117-source-index.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-gate:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E117_publication_ivy_archive_gate.py
+          persist-credentials: false
+      - run: python3 research_901/E117_publication_ivy_archive_gate.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E117-Nature-and-Ivy-Bounded-Gate
+          path: 901_E117_publication_and_ivy_source_gate.json
+          retention-days: 7
+          if-no-files-found: warn
