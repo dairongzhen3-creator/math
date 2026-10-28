@@ -1,0 +1,28 @@
+name: 901 E117 reconcile publisher individual Mimosa response latencies
+on:
+  push:
+    paths: ['.github/workflows/901-e117-ed8c-latencies.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E117_published_mimosa_37_lag_audit.py
+          persist-credentials: false
+      - run: python3 research_901/E117_published_mimosa_37_lag_audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E117-published-37-Mimosa-3-stage-lags
+          path: |
+            901_E117_ED8c_latency_audit.json
+            901_E117_ED8c_37_observations.csv
+          retention-days: 7
+          if-no-files-found: warn
