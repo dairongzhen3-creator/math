@@ -14,11 +14,18 @@ N="{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 with zipfile.ZipFile(io.BytesIO(b)) as z:
     assert z.testzip() is None
     path="xl/worksheets/sheet1.xml"
+    shared=[]
+    if "xl/sharedStrings.xml" in z.namelist():
+        strings_root=ET.fromstring(z.read("xl/sharedStrings.xml"))
+        shared=["".join((t.text or "") for t in item.iter() if t.tag==N+"t") for item in strings_root.findall(N+"si")]
     root=ET.fromstring(z.read(path))
     vals={}
     for c in root.iter(N+"c"):
         v=c.find(N+"v")
-        if v is not None and v.text is not None:vals[c.get("r")]=v.text
+        if v is not None and v.text is not None:
+            value=v.text
+            if c.attrib.get("t")=="s":value=shared[int(value)]
+            vals[c.get("r")]=value
         else:
             ins=c.find(N+"is")
             if ins is not None:vals[c.get("r")]="".join(t.text or "" for t in ins.iter() if t.tag==N+"t")
