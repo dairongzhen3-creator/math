@@ -1,0 +1,82 @@
+name: "901 E116 bounded public source structure audit"
+on:
+  push:
+    paths:
+      - '.github/workflows/901-e116-bounded-source-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Safely inspect limited Zenodo public archives without executing any third-party code
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, hashlib, io, zipfile, csv, json, re, time, os
+          from pathlib import Path
+          sources=[
+            ("lettuce60","https://zenodo.org/records/19386720/files/Supplementary%20data%20and%20code.zip?download=1","9ceba7a9ad2c868eaa9ef422e50f091e",14000000),
+            ("ivy_feature_selection","https://zenodo.org/records/15095523/files/feature_selection.zip?download=1","6ace334473e48a70e4d16f3c13a0fe39",300000),
+            ("ivy_weather","https://zenodo.org/records/15095523/files/weather_data.zip?download=1","cee1cba7d59cca5b80d62f3fe33698c8",1000000),
+            ("tomato_v3_class_results","https://zenodo.org/records/22081982/files/2_class_classification_results.zip?download=1","69197aabc0bd93136ff9f0fc82a364fb",300000),
+            ("tomato_v3_environment","https://zenodo.org/records/22081982/files/Greenhouse_data_temperature_humidity_ppdf.xlsx?download=1","962d8f0675a104cea0ba0b0816c1f957",300000)
+          ]
+          report={"project":"901","stage":"E116","only_public_data":True,"source_code_executed":False,"scientific_experiment_replicates":0,"sources":[]}
+          for name,url,want,maxb in sources:
+            item={"name":name,"source_url":url,"expected_md5":want}
+            try:
+              req=urllib.request.Request(url,headers={"User-Agent":"901-reproducibility-audit/1.0 (open-research)","Accept":"application/octet-stream"})
+              with urllib.request.urlopen(req,timeout=55) as resp:
+                item["http_status"]=resp.status
+                item["final_host"]=urllib.parse.urlsplit(resp.geturl()).hostname
+                mime=resp.headers.get("Content-Type","")
+                item["mime"]=mime
+                buf=resp.read(maxb+1)
+              if len(buf)>maxb: raise ValueError("TOO_LARGE_FOR_BOUND")
+              item["bytes"]=len(buf)
+              item["sha256"]=hashlib.sha256(buf).hexdigest()
+              item["actual_md5"]=hashlib.md5(buf).hexdigest()
+              item["md5_match"]=(item["actual_md5"]==want)
+              if not item["md5_match"]: raise ValueError("WRONG_BYTES_MD5_MISMATCH")
+              with zipfile.ZipFile(io.BytesIO(buf)) as z:
+                infos=z.infolist()
+                item["total_members"]=len(infos)
+                item["zip_crc_all"]=z.testzip() is None
+                item["uncompressed_total_bytes"]=sum(m.file_size for m in infos)
+                item["members"]=[]
+                chosen=[m for m in infos if not m.is_dir() and (
+                  any(tok in m.filename.lower() for tok in ("readme","metadata","sample","plant","signal","labels","ground","2026","classification","results","features","weather","electro","physiolog","code"))
+                  or m.filename.lower().endswith((".csv",".tsv",".xlsx",".json",".txt",".parquet",".py",".r",".md"))
+                )]
+                for m in chosen[:35]:
+                  rec={"path":m.filename[:180],"size":m.file_size,"crc32":format(m.CRC,"08x")}
+                  if m.file_size<=1500000 and m.filename.lower().endswith((".csv",".tsv",".txt",".json",".md",".py",".r")):
+                    try:
+                      raw=z.read(m)
+                      txt=raw[:3200].decode("utf-8-sig","replace")
+                      rec["first_lines"]=[line[:240] for line in txt.splitlines()[:3]]
+                      if m.filename.lower().endswith((".csv",".tsv")):
+                        rr=list(csv.reader(txt.splitlines()[:3],delimiter=("\t" if m.filename.lower().endswith(".tsv") else ",")))
+                        rec["first_row_column_count"]=len(rr[0]) if rr else 0
+                    except Exception as ex: rec["preview_error"]=type(ex).__name__
+                  item["members"].append(rec)
+            except Exception as ex:
+              item["failure_type"]=type(ex).__name__
+              item["failure"]=str(ex)[:300]
+            report["sources"].append(item)
+            print("E116_SOURCE",json.dumps(item,ensure_ascii=False),flush=True)
+          out=Path("901_e116_public_sources_gate.json")
+          out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
+          print("E116_ALL",json.dumps({"source_count":len(report["sources"]),"md5_ok":sum(x.get("md5_match",False) for x in report["sources"]),"with_members":sum(bool(x.get("members")) for x in report["sources"])}),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E116-public-sources-gate
+          path: 901_e116_public_sources_gate.json
+          retention-days: 7
+          if-no-files-found: warn
