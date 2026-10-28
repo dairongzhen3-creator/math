@@ -20,6 +20,8 @@ with zipfile.ZipFile(io.BytesIO(archive)) as z:
     paths=z.namelist(); src_script=z.read(next(n for n in paths if n.endswith('/t0_process_features.py'))).decode('utf-8','replace')
 plants=defaultdict(dict); groups={}; nrows=0; duplicate=0; skipped=0
 with zipfile.ZipFile(io.BytesIO(data)) as z, z.open('xl/worksheets/sheet1.xml') as f:
+    shared_root=ET.fromstring(z.read('xl/sharedStrings.xml'))
+    shared_strings=[''.join(t.text or '' for t in si.iter() if t.tag==NS+'t') for si in shared_root.findall(NS+'si')]
     for event,row in ET.iterparse(f,events=('end',)):
         if row.tag!=NS+'row': continue
         rowid=int(row.attrib.get('r','0'))
@@ -32,7 +34,7 @@ with zipfile.ZipFile(io.BytesIO(data)) as z, z.open('xl/worksheets/sheet1.xml') 
             v[col]=e.text
         row.clear()
         try:
-            t=int(round(float(v['A'])));p=int(float(v['B'])); group=v['C']
+            t=int(round(float(v['A'])));raw_p=int(float(v['B'])); raw_g=v['C']; group=shared_strings[int(raw_g)] if raw_g.isdigit() else raw_g; p=f'{group}:{raw_p}'
             k=float(v['D']);ph=float(v['E']);h=float(v['F'])
             if not all(math.isfinite(q) for q in (k,ph,h)): raise ValueError('nonfinite')
             if t in plants[p]: duplicate+=1
@@ -41,6 +43,7 @@ with zipfile.ZipFile(io.BytesIO(data)) as z, z.open('xl/worksheets/sheet1.xml') 
             groups[p]=group;nrows+=1
         except (ValueError,KeyError,TypeError): skipped+=1
 nplant=len(plants)
+assert nplant==60 and duplicate==0 and skipped==0,(nplant,duplicate,skipped)
 bygroup=defaultdict(list)
 for p,g in groups.items():bygroup[g].append(p)
 def pct(x,q):
@@ -136,7 +139,7 @@ for _ in range(2000):boot.append(sum(diff[rng.randrange(len(diff))] for j in ran
 boot.sort();ci=(boot[49],boot[1949]) if boot else None
 means={name:statistics.mean(r['mean_abs_err'][name] for r in perplant) for name in ('persist','M0','M1','placebo')}
 report={'stage':'E116','study':'Zhou lettuce 60 plant K/pH/H2O2 source','origin':'https://zenodo.org/records/19386720','original_archive_md5':MD5,'xlsx_sha256':input_sha,'source_scripts_executed':False,'columns':['Time (s)','Plant_ID','Group','K_Ratio','pH_Value','H2O2_Conc'],
- 'observed_rows':nrows,'duplicates_plant_time':duplicate,'unparsable_rows':skipped,'unique_plants':nplant,
+ 'observed_rows':nrows,'duplicates_plant_time':duplicate,'unparsable_rows':skipped,'unique_plants':nplant,'physical_parent_key':'Group + Plant_ID (Plant_ID reused across 6 groups)',
  'plants_by_group':{g:len(ids) for g,ids in bygroup.items()},'trace_sizes':{str(p):len(v) for p,v in plants.items()},
  'regular_10s_gap_missing_fraction_median':pct(missing,.5),'H2O2_first_diff_fraction_negative_median_by_plant':pct([x for x in monos if x is not None],.5),
  'H2O2_abs_second_difference_q50':pct(second_d,.5),'H2O2_abs_second_difference_q95':pct(second_d,.95),
