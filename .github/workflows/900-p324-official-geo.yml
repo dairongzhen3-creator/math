@@ -1,0 +1,30 @@
+name: 900 P324C bounded NCBI GEO public-source intake
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p324-official-geo.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  intake:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P324_bounded_geo_fetch.py
+          persist-credentials: false
+      - name: Download only the two public GEO supplements with strict byte caps
+        shell: bash
+        run: python3 research_900/P324_bounded_geo_fetch.py P324_GEO_PUBLIC_INTAKE
+      - name: Preserve source files and success/failure receipt for independent readback
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P324C-official-GEO-bounded-intake
+          path: P324_GEO_PUBLIC_INTAKE/
+          retention-days: 7
+          if-no-files-found: warn
