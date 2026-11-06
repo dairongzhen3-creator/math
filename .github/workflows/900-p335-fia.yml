@@ -1,0 +1,31 @@
+name: 900 P335C FIA source-locked intake
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p335-fia.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-readonly:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P335_bounded_fia_source.py
+          persist-credentials: false
+      - name: Install binary-only reader
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: pyreadr pandas
+      - name: Read original pinned FIA bytes without executing source code
+        run: python3 research_900/P335_bounded_fia_source.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P335C-verified-FIA-original
+          path: P335_FIA_RAW_SOURCE/
+          retention-days: 7
+          if-no-files-found: error
