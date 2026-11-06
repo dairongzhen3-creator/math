@@ -22,7 +22,7 @@ jobs:
         run: python3 research_900/P333_bounded_joller_source.py
       - name: Install binary-only RDS reader
         run: |
-          python3 -m pip install --disable-pip-version-check --only-binary=:all: pyreadr
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: pyreadr pandas
       - name: Convert verified public RDS tables
         run: python3 research_900/P333_pyreadr_export.py
       - uses: actions/upload-artifact@v4
