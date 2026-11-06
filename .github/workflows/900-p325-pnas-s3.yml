@@ -1,0 +1,28 @@
+name: 900 P325C official PNAS S3 bounded evidence source
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p325-pnas-s3.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  p325-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P325_bounded_pnas_s3.py
+          persist-credentials: false
+      - name: Bounded read of public official S3 workbook
+        run: python3 research_900/P325_bounded_pnas_s3.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P325C-pnas-S3-publisher-source
+          path: P325_PUBLISHER_S3_RECEIPT/
+          retention-days: 7
+          if-no-files-found: error
