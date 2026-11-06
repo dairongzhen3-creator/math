@@ -4,9 +4,9 @@ import hashlib,io,json,urllib.request,urllib.parse,zipfile
 from pathlib import Path
 OUT=Path("P327_OFFICIAL_SI_SOURCE"); OUT.mkdir(exist_ok=True)
 URL="https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13143037/supplementaryFiles"
-EXPECTED_SHA="8ab25bd3f3163b6d9bbb7d8a9a355a2e0d6368bb923bafbbf574d29dd8abbfe4"
+EXPECTED_S3_SHA="ee8badd7d32ca8da477ef9140e9319d229a01b1e6c7d1d0af2f347b261f29e30"
 MAX=10_000_000
-report={"source":URL,"status":"SOURCE_NOT_RECEIVED","target":"pnas.2532423123.sapp.pdf","expected_bundle_sha256":EXPECTED_SHA}
+report={"source":URL,"status":"SOURCE_NOT_RECEIVED","target":"pnas.2532423123.sapp.pdf","expected_signed_S3_sha256":EXPECTED_S3_SHA}
 try:
  req=urllib.request.Request(URL,headers={"User-Agent":"900-P327-read-only-source-validation/1.0"})
  with urllib.request.urlopen(req,timeout=35) as response:
@@ -17,8 +17,9 @@ try:
   payload=response.read(MAX+1)
  if len(payload)>MAX:raise ValueError("TOO_LARGE")
  actual=hashlib.sha256(payload).hexdigest()
- if actual!=EXPECTED_SHA:raise ValueError("BUNDLE_SHA256_MISMATCH")
  with zipfile.ZipFile(io.BytesIO(payload)) as z:
+  s3=[n for n in z.namelist() if n.lower().endswith("pnas.2532423123.sd03.xlsx")]
+  if len(s3)!=1 or hashlib.sha256(z.read(s3[0])).hexdigest()!=EXPECTED_S3_SHA: raise ValueError("SIGNED_S3_MEMBER_SHA256_MISMATCH")
   if z.testzip():raise ValueError("ZIP_BAD_CRC")
   names=[n for n in z.namelist() if n.lower().endswith("pnas.2532423123.sapp.pdf")]
   if len(names)!=1:raise ValueError("PDF_AMBIGUOUS")
