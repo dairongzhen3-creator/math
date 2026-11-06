@@ -1,0 +1,28 @@
+name: 900 P330C bounded PNAS S2 official source
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p330-pnas-s2.yml'
+      - 'research_900/P330_bounded_pnas_s2.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P330_bounded_pnas_s2.py
+          persist-credentials: false
+      - run: python3 research_900/P330_bounded_pnas_s2.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P330C-verified-PNAS-S2-source
+          path: P330_PNAS_S2_OFFICIAL/
+          retention-days: 7
+          if-no-files-found: error
