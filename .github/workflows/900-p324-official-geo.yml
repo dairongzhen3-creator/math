@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/900-p324-official-geo.yml'
+      - 'research_900/P324_bounded_geo_fetch.py'
   workflow_dispatch:
 permissions:
   contents: read
