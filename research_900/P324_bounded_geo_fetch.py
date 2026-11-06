@@ -45,39 +45,38 @@ def inspect(data, series):
  with gzip.GzipFile(fileobj=io.BytesIO(data)) as gz:
   decoded=gz.read(MAX_DECODED+1)
   if len(decoded)>MAX_DECODED: raise ValueError('DECODED_LIMIT')
- text=decoded.decode('utf-8-sig')
+ charset='utf-16' if decoded.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-8-sig'
+ text=decoded.decode(charset)
  rows=csv.reader(io.StringIO(text,newline=''),delimiter='\t')
  header=next(rows)
- if len(header)!=len(set(header)) or len(header)<2: raise ValueError('BAD_HEADER')
- names=EXPECTED[series]
- # Only exact published sample labels or exact GSM accessions are unambiguous.
- gm={'GSE208376':[f'GSM{i}' for i in range(6342032,6342041)],'GSE270548':[f'GSM{i}' for i in range(8346505,8346511)]}[series]
- found=names if set(names).issubset(header) else gm if set(gm).issubset(header) else []
- sample_index=[header.index(x) for x in found]
- gene_count=0
- valid_int=True; all_nonnegative=True
- totals=[0]*len(found); zeros=[0]*len(found)
- preview=[]
- for row in rows:
-  if len(row)!=len(header): raise ValueError('RAGGED_TABLE')
-  if not any(v.strip() for v in row): continue
-  gene_count+=1
-  if gene_count<=3: preview.append(row[0][:60])
-  if found:
-   for j,col in enumerate(sample_index):
-    val=row[col].strip()
-    if not val.isdecimal(): valid_int=False; continue
-    iv=int(val); totals[j]+=iv; zeros[j]+=(iv==0)
- summary={'header_preview':header[:24], 'n_columns':len(header),'gene_or_table_rows':gene_count,'id_preview':preview,
-          'published_sample_labels_exact':bool(found),'matched_column_names':found, 'integer_and_nonnegative':valid_int and all_nonnegative,
-          'totals_if_sample_counts':dict(zip(found,totals)) if found and valid_int else {},
-          'zeros_if_sample_counts':dict(zip(found,zeros)) if found and valid_int else {},
-          'decoded_bytes':len(decoded)}
- if found and valid_int and gene_count>=100 and len(found)==len(names):
-  summary['data_class']='REPORTED_SAMPLE_COUNT_MATRIX_PROVISIONAL';summary['status']='SCHEMA_PASS_CULTURE_AND_BATCH_PENDING'
+ if len(header)!=len(set(x for x in header if x)) + sum(not x for x in header):
+  raise ValueError('DUPLICATE_NONBLANK_HEADER')
+ if series=='GSE208376':
+  required=['mock_1','mock_2','mock_3','flg22_1','flg22_2','flg22_3',"2'AA_1","2'AA_2","2'AA_3"]
+  if [x for x in header if x]!=required or len(header)!=15: raise ValueError('PLANT_HEADER_MISMATCH')
+  cols=required;use_recovered_header=True;expected_width=10
  else:
-  summary['data_class']='UNVERIFIED_DERIVED_OR_INCOMPATIBLE';summary['status']='NO_RAW_COUNT_CERTIFICATE'
- return summary
+  required=['Mock1_count','Mock2_count','Mock3_count','AA1_count','AA2_count','AA3_count']
+  if not all(x in header for x in required): raise ValueError('BACT_COUNT_COLS_MISSING')
+  cols=required;use_recovered_header=False;expected_width=len(header)
+ indexes=[(i+1) if use_recovered_header else header.index(x) for i,x in enumerate(cols)]
+ totals=[0]*len(cols);zeros=[0]*len(cols);ids=set();n=0
+ for row in rows:
+  if len(row)!=expected_width: raise ValueError('RAGGED_ROWS')
+  if not row[0] or row[0] in ids: raise ValueError('MISSING_OR_DUPLICATED_GENE_ID')
+  ids.add(row[0]);n+=1
+  for i,c in enumerate(indexes):
+   val=row[c].strip()
+   if not val.isdecimal(): raise ValueError('NON_INTEGER_OR_MISSING_COUNTS')
+   k=int(val);totals[i]+=k;zeros[i]+=(k==0)
+ if n<100: raise ValueError('TOO_FEW_GENES')
+ return {'status':'SOURCE_SCHEMA_PASS','data_class':'AUTHOR_PROVIDED_PER_SAMPLE_INTEGER_GENE_COUNTS',
+         'source_char_encoding':charset,'header_width_original':len(header),
+         'source_header_has_extra_blank_slots':use_recovered_header,
+         'observed_raw_count_columns':cols,'gene_rows':n,
+         'sample_library_totals':dict(zip(cols,totals)),
+         'sample_zero_gene_counts':dict(zip(cols,zeros)),
+         'decoded_bytes':len(decoded),'no_biological_de_claim':True}
 
 def run(out):
  out=Path(out);out.mkdir(parents=True,exist_ok=True)
