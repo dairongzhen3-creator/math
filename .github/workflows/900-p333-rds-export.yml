@@ -1,13 +1,11 @@
-name: 900 P333C source-locked RDS to inspectable CSV
+name: 900 P333C source-locked RDS CSV export
 on:
   push:
     paths:
       - '.github/workflows/900-p333-rds-export.yml'
-      - 'research_900/P333_pyreadr_export.py'
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 jobs:
   bounded-convert:
     if: github.repository == 'dairongzhen3-creator/math'
@@ -17,22 +15,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
+            research_900/P333_bounded_joller_source.py
             research_900/P333_pyreadr_export.py
           persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: 900-P333C-Joller-pinned-source-evidence
-          run-id: 42237749354
-          github-token: ${{ github.token }}
-          path: P333_JOLLER_PINNED_SOURCES
-      - name: Install reader for RDS without executing R code
-        run: python3 -m pip install --disable-pip-version-check --only-binary=:all: "pyreadr>=0.5,<0.6"
-      - name: Read SHA-accepted RDS tables
+      - name: Retrieve public 10-file pinned source
+        run: python3 research_900/P333_bounded_joller_source.py
+      - name: Install binary-only RDS reader
+        run: python3 -m pip install --disable-pip-version-check --only-binary=:all: pyreadr
+      - name: Convert verified public RDS tables
         run: python3 research_900/P333_pyreadr_export.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: 900-P333C-accepted-RDS-tabular-export
-          path: P333_JOLLER_PINNED_SOURCES/derived/
+          name: 900-P333C-verified-RDS-tables
+          path: P333_JOLLER_PINNED_SOURCES/
           retention-days: 7
           if-no-files-found: error
