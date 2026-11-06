@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/900-p327-pnas-si.yml'
+      - 'research_900/P327_bounded_sapp_from_verified_bundle.py'
   workflow_dispatch:
 permissions:
   contents: read
