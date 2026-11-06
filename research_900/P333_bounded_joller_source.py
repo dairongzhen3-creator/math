@@ -39,7 +39,7 @@ for rel,(expected,size) in FILES.items():
    if h.headers.get("Content-Length") and int(h.headers.get("Content-Length"))>size:raise ValueError("HEADER_SIZE_EXCEEDED")
    raw=h.read(size+1)
   if len(raw)!=size:raise ValueError(f"BYTE_COUNT_MISMATCH:{len(raw)}")
-  gitsha=hashlib.sha1(("blob "+str(len(raw))+"\\0").encode().replace(b"\\0",b"\\x00")+raw).hexdigest()
+  gitsha=hashlib.sha1(b"blob "+str(len(raw)).encode("ascii")+bytes([0])+raw).hexdigest()
   if gitsha!=expected:raise ValueError("PINNED_GIT_BLOB_SHA_MISMATCH")
   dest=ROOT/rel;dest.parent.mkdir(exist_ok=True,parents=True);dest.write_bytes(raw)
   aggregate+=len(raw)
