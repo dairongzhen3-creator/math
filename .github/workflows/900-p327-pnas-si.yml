@@ -1,0 +1,27 @@
+name: 900 P327C read-only PNAS supplementary methods source
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p327-pnas-si.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P327_bounded_sapp_from_verified_bundle.py
+          persist-credentials: false
+      - run: python3 research_900/P327_bounded_sapp_from_verified_bundle.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P327C-verified-official-PNAS-SI
+          path: P327_OFFICIAL_SI_SOURCE/
+          retention-days: 7
+          if-no-files-found: error
