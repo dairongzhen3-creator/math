@@ -1,0 +1,28 @@
+name: 900 P332C official PNAS S4 bounded source
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p332-pnas-s4.yml'
+      - 'research_900/P332_bounded_pnas_s4.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P332_bounded_pnas_s4.py
+          persist-credentials: false
+      - run: python3 research_900/P332_bounded_pnas_s4.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P332C-verified-official-PNAS-S4
+          path: P332_OFFICIAL_S4/
+          retention-days: 7
+          if-no-files-found: error
