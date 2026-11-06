@@ -1,0 +1,40 @@
+name: 900 P333C bounded independent paired microcosm source
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p333-joller-source.yml'
+      - 'research_900/P333_bounded_joller_source.py'
+      - 'research_900/P333_export_rds.R'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P333_bounded_joller_source.py
+            research_900/P333_export_rds.R
+          persist-credentials: false
+      - name: Fetch pinned public sources with exact Git blob checks
+        run: python3 research_900/P333_bounded_joller_source.py
+      - name: Inspect and export tabular RDS in base R if installed
+        shell: bash
+        run: |
+          if command -v Rscript >/dev/null 2>&1; then
+            Rscript research_900/P333_export_rds.R
+          else
+            mkdir -p P333_JOLLER_PINNED_SOURCES/derived
+            echo R_NOT_INSTALLED_SOURCE_BYTES_ONLY > P333_JOLLER_PINNED_SOURCES/derived/R_RUNTIME_STATUS.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P333C-Joller-pinned-source-evidence
+          path: P333_JOLLER_PINNED_SOURCES/
+          retention-days: 7
+          if-no-files-found: error
