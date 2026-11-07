@@ -30,7 +30,7 @@ jobs:
               receipt["sha256"]=hashlib.sha256(data).hexdigest()
               receipt["md5"]=hashlib.md5(data).hexdigest()
               if len(data)>500000:raise ValueError("FILE_SIZE_CAP_EXCEEDED")
-              if not data.startswith(b"PK\\x03\\x04"):raise ValueError("NOT_OOXML_ZIP_SIGNATURE")
+              if not data.startswith(b"PK\x03\x04"):raise ValueError("NOT_OOXML_ZIP_SIGNATURE")
               if receipt["md5"]!=official_md5:raise ValueError("OFFICIAL_MD5_MISMATCH")
               with zipfile.ZipFile(io.BytesIO(data)) as z:
                   items=z.infolist()
@@ -43,7 +43,7 @@ jobs:
               (root/"E369_Zenodo_v5_Figure3_original.xlsx").write_bytes(data)
           except Exception as e:
               receipt.update(status="BLOCKED_OR_REJECTED",error_type=type(e).__name__,error=str(e)[:300])
-          (root/"E369_source_intake_receipt.json").write_text(json.dumps(receipt,sort_keys=True,ensure_ascii=False,indent=2)+"\\n",encoding="utf-8")
+          (root/"E369_source_intake_receipt.json").write_text(json.dumps(receipt,sort_keys=True,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
           print(json.dumps(receipt,sort_keys=True,ensure_ascii=False))
           PY
       - name: Temporarily upload public source and integrity receipt
