@@ -1,0 +1,51 @@
+name: 901 E369 bounded public Zenodo v1 Figure3 source verification
+on:
+  push:
+    branches: ['cloud-public-sources-901-e369-20261107']
+    paths: ['.github/workflows/901-e369-public-fig3-v1.yml']
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Download one fixed public CSV and independently verify Zenodo MD5
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,hashlib,csv,io,json,os
+          root=pathlib.Path("e369_zenodo_fig3_v1_public");root.mkdir(exist_ok=True)
+          url="https://zenodo.org/records/16737206/files/Growth_Curve_Data_with_Replicates__OD570%20figure%203%20F.csv?download=1"
+          official_md5="32caa9c5aed4cb4b207055a600427007"
+          receipt={"project":901,"stage":"E369","version":"v1","doi":"10.5281/zenodo.16737206","expected_md5":official_md5,"run_id":os.environ.get("GITHUB_RUN_ID"),"status":"NOT_RECEIVED"}
+          try:
+              req=urllib.request.Request(url,headers={"User-Agent":"AcademicSourceIntegrityResearch/1.0","Accept":"text/csv,*/*"})
+              with urllib.request.urlopen(req,timeout=45) as resp:
+                  body=resp.read(100001)
+                  receipt["http_status"]=resp.status
+                  receipt["content_type"]=resp.headers.get("Content-Type","")[:100]
+              receipt["size_bytes"]=len(body)
+              receipt["md5"]=hashlib.md5(body).hexdigest()
+              receipt["sha256"]=hashlib.sha256(body).hexdigest()
+              if len(body)>100000:raise ValueError("FILE_EXCEEDS_100KB")
+              if body[:40].lstrip().lower().startswith(b"<html"):raise ValueError("NOT_CSV_HTML")
+              if receipt["md5"]!=official_md5:raise ValueError("OFFICIAL_MD5_MISMATCH")
+              text=body.decode("utf-8-sig")
+              csvrows=list(csv.reader(io.StringIO(text)))
+              if len(csvrows)!=577:raise ValueError("ROW_COUNT_NOT_576")
+              if any(len(row)!=len(csvrows[0]) for row in csvrows[1:]):raise ValueError("ROW_WIDTH_INCONSISTENT")
+              (root/"E369_Zenodo_v1_Figure3_original.csv").write_bytes(body)
+              receipt.update(status="PASS_OFFICIAL_MD5_CSV",rows=576,columns=len(csvrows[0]),header=csvrows[0])
+          except Exception as e:
+              receipt.update(status="BLOCKED_OR_REJECTED",error_type=type(e).__name__,error=str(e)[:300])
+          (root/"E369_v1_intake_receipt.json").write_text(json.dumps(receipt,sort_keys=True,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+          print(json.dumps(receipt,sort_keys=True,ensure_ascii=False))
+          PY
+      - name: Temporarily upload public source and receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e369-zenodo-v1-figure3
+          path: e369_zenodo_fig3_v1_public/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
