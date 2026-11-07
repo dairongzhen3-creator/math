@@ -1,0 +1,56 @@
+name: 901 E369 bounded public Zenodo v5 Figure3 source verification
+on:
+  push:
+    branches: ['cloud-public-sources-901-e369-20261107']
+    paths: ['.github/workflows/901-e369-public-fig3.yml']
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Download one fixed public XLSX and independently verify Zenodo MD5
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, urllib.request, hashlib, io, zipfile, json, os
+          root=pathlib.Path("e369_zenodo_fig3_public");root.mkdir(exist_ok=True)
+          name="Growth_Curve_Figure_3_Statistical_Analysis_Excel_Online (3).xlsx"
+          url="https://zenodo.org/records/22798201/files/Growth_Curve_Figure_3_Statistical_Analysis_Excel_Online%20%283%29.xlsx?download=1"
+          official_md5="ee25036d34466ab1c394133927d810e9"
+          receipt={"project":901,"stage":"E369","zenodo_record":"https://zenodo.org/records/22798201","version":"v5","file":name,"expected_md5":official_md5,"run_id":os.environ.get("GITHUB_RUN_ID"),"status":"NOT_RECEIVED"}
+          try:
+              req=urllib.request.Request(url,headers={"User-Agent":"AcademicSourceIntegrityResearch/1.0","Accept":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+              with urllib.request.urlopen(req,timeout=45) as resp:
+                  data=resp.read(500001)
+                  receipt["http_status"]=resp.status
+                  receipt["content_type"]=resp.headers.get("Content-Type","")[:100]
+              receipt["size_bytes"]=len(data)
+              receipt["prefix_hex"]=data[:12].hex()
+              receipt["sha256"]=hashlib.sha256(data).hexdigest()
+              receipt["md5"]=hashlib.md5(data).hexdigest()
+              if len(data)>500000:raise ValueError("FILE_SIZE_CAP_EXCEEDED")
+              if not data.startswith(b"PK\\x03\\x04"):raise ValueError("NOT_OOXML_ZIP_SIGNATURE")
+              if receipt["md5"]!=official_md5:raise ValueError("OFFICIAL_MD5_MISMATCH")
+              with zipfile.ZipFile(io.BytesIO(data)) as z:
+                  items=z.infolist()
+                  if len(items)>500 or sum(item.file_size for item in items)>50_000_000:raise ValueError("ZIP_EXPANSION_LIMIT")
+                  if any(item.filename.startswith("/") or ".." in item.filename.split("/") for item in items):raise ValueError("UNSAFE_MEMBER_PATH")
+                  if any(item.filename.endswith("vbaProject.bin") for item in items):raise ValueError("MACRO_NOT_ALLOWED")
+                  if z.testzip() is not None:raise ValueError("ZIP_CRC_FAILURE")
+                  if "xl/workbook.xml" not in z.namelist():raise ValueError("NOT_EXCEL_WORKBOOK")
+              receipt.update(status="PASS_OFFICIAL_MD5_CRC",zip_members=len(items))
+              (root/"E369_Zenodo_v5_Figure3_original.xlsx").write_bytes(data)
+          except Exception as e:
+              receipt.update(status="BLOCKED_OR_REJECTED",error_type=type(e).__name__,error=str(e)[:300])
+          (root/"E369_source_intake_receipt.json").write_text(json.dumps(receipt,sort_keys=True,ensure_ascii=False,indent=2)+"\\n",encoding="utf-8")
+          print(json.dumps(receipt,sort_keys=True,ensure_ascii=False))
+          PY
+      - name: Temporarily upload public source and integrity receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e369-zenodo-v5-figure3
+          path: e369_zenodo_fig3_public/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
