@@ -1,0 +1,70 @@
+name: 901 E377 Schmitz 2024 official supplementary statistics intake
+on:
+  push:
+    branches: ['cloud-public-sources-901-e377-20261108']
+    paths: ['.github/workflows/901-e377-schmitz-supp.yml']
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Obtain official Europe PMC supplementary XLSX, validate integrity and list sheet names
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,hashlib,json,zipfile,io,pathlib,os,xml.etree.ElementTree as ET
+          output=pathlib.Path('e377_official_supplement');output.mkdir()
+          url='https://www.ebi.ac.uk/europepmc/webservices/rest/PMC11287475/supplementaryFiles'
+          result={'project':901,'stage':'E377','article_doi':'10.1093/ismeco/ycae045','pmcid':'PMC11287475','source_url':url,'github_run':os.environ.get('GITHUB_RUN_ID'),'status':'NOT_RECEIVED'}
+          try:
+              req=urllib.request.Request(url,headers={'User-Agent':'AcademicResearchReproducibility/1.0','Accept':'application/zip,application/octet-stream'})
+              with urllib.request.urlopen(req,timeout=70) as resp:
+                  data=resp.read(20000001)
+                  result['http_status']=resp.status
+                  result['content_type']=resp.headers.get('Content-Type','')[:120]
+              result['package_bytes']=len(data)
+              result['package_sha256']=hashlib.sha256(data).hexdigest()
+              if len(data)>20000000:raise ValueError('PACKAGE_SIZE_LIMIT')
+              if not data.startswith(bytes([80,75,3,4])):raise ValueError('NOT_ZIP')
+              with zipfile.ZipFile(io.BytesIO(data)) as src:
+                  info=src.infolist()
+                  if len(info)>800 or sum(x.file_size for x in info)>100000000:raise ValueError('EXPANSION_GUARD')
+                  if any(x.filename.startswith('/') or '..' in x.filename.replace(chr(92),'/').split('/') for x in info):raise ValueError('UNSAFE_ZIP_MEMBER')
+                  if src.testzip() is not None:raise ValueError('ZIP_CRC_FAILED')
+                  result['archive_members']=[{'name':x.filename,'bytes':x.file_size} for x in info]
+                  xlsx=[x for x in info if x.filename.lower().endswith('.xlsx') and 'statistic' in x.filename.lower() and 'schmitz' in x.filename.lower()]
+                  if len(xlsx)!=1:raise ValueError('NO_UNIQUE_SCHMITZ_STATISTICS_XLSX')
+                  body=src.read(xlsx[0])
+              result['xlsx_source_name']=xlsx[0].filename
+              result['xlsx_bytes']=len(body)
+              result['xlsx_sha256']=hashlib.sha256(body).hexdigest()
+              result['xlsx_md5']=hashlib.md5(body).hexdigest()
+              if len(body)>12000000 or not body.startswith(bytes([80,75,3,4])):raise ValueError('INVALID_XLSX_BYTES')
+              with zipfile.ZipFile(io.BytesIO(body)) as book:
+                  items=book.infolist()
+                  if book.testzip() is not None:raise ValueError('XLSX_CRC_FAILED')
+                  if len(items)>1000 or sum(i.file_size for i in items)>50000000:raise ValueError('XLSX_EXPANSION_GUARD')
+                  xml=book.read('xl/workbook.xml')
+                  root=ET.fromstring(xml)
+                  ns={'m':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                  sheets=[x.attrib.get('name') for x in root.findall('.//m:sheet',ns)]
+                  result['sheets']=sheets
+                  result['xlsx_zip_members']=len(items)
+              (output/'E377_official_schmitz_statistical_supplement.xlsx').write_bytes(body)
+              result['status']='PASS_OFFICIAL_SOURCE_CRC'
+          except urllib.error.HTTPError as exc:
+              result.update(status='HTTP_BLOCK',code=exc.code,error=str(exc)[:200])
+          except Exception as exc:
+              result.update(status='BLOCKED_OR_REJECTED',error_type=type(exc).__name__,error=str(exc)[:300])
+          (output/'E377_supplement_intake_receipt.json').write_text(json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False,sort_keys=True)[:9000])
+          PY
+      - name: Temporarily upload public research supplement and receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e377-schmitz-supp
+          path: e377_official_supplement/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
