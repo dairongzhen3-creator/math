@@ -1,0 +1,58 @@
+name: 901 E370 Europe PMC official supplementary archive audit
+on:
+  push:
+    branches: ['cloud-public-sources-901-e370-20261107']
+    paths: ['.github/workflows/901-e370-europepmc-supp.yml']
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - name: Fetch only official open access supplementary bundle
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,urllib.request,urllib.error,hashlib,io,zipfile,json,os
+          root=pathlib.Path("901_e370_europepmc");root.mkdir(exist_ok=True)
+          url="https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13007599/supplementaryFiles"
+          receipt={"project":901,"stage":"E370","pmcid":"PMC13007599","source":url,"run_id":os.environ.get("GITHUB_RUN_ID"),"status":"NOT_RECEIVED"}
+          try:
+              req=urllib.request.Request(url,headers={"User-Agent":"AcademicDataAudit/1.0","Accept":"application/zip,application/octet-stream,*/*"})
+              with urllib.request.urlopen(req,timeout=60) as resp:
+                  body=resp.read(8000001)
+                  receipt.update(http_status=resp.status,content_type=resp.headers.get("Content-Type","")[:120])
+              receipt.update(size_bytes=len(body),sha256=hashlib.sha256(body).hexdigest(),prefix_hex=body[:12].hex())
+              if len(body)>8000000:raise ValueError("ARCHIVE_SIZE_GUARD")
+              if not body.startswith(bytes([80,75,3,4])):raise ValueError("NOT_ZIP")
+              with zipfile.ZipFile(io.BytesIO(body)) as z:
+                  infos=z.infolist()
+                  if len(infos)>600 or sum(i.file_size for i in infos)>60000000:raise ValueError("ZIP_BOMB_GUARD")
+                  if z.testzip() is not None:raise ValueError("ZIP_CRC_ERROR")
+                  names=z.namelist()
+                  receipt["archive_members"]=names[:80]
+                  hits=[i for i in infos if i.filename.lower().endswith("supplementary_data_file_wrag039.xlsx")]
+                  if not hits:raise ValueError("TARGET_XLSX_NOT_IN_OFFICIAL_ARCHIVE")
+                  if len(hits)!=1:raise ValueError("DUPLICATE_XLSX")
+                  data=z.read(hits[0])
+              if len(data)>1000000 or not data.startswith(bytes([80,75,3,4])):raise ValueError("TARGET_NOT_BOUNDED_XLSX")
+              with zipfile.ZipFile(io.BytesIO(data)) as book:
+                  if book.testzip() is not None or "xl/workbook.xml" not in book.namelist():raise ValueError("NOT_VALID_XLSX")
+                  receipt["xlsx_zip_members"]=len(book.namelist())
+              (root/"E370_Batra_wrag039_supp_original.xlsx").write_bytes(data)
+              receipt.update(status="PASS_OFFICIAL_EUROPEPMC_XLSX_CRC",xlsx_bytes=len(data),xlsx_sha256=hashlib.sha256(data).hexdigest())
+          except urllib.error.HTTPError as e:
+              receipt.update(status="BLOCKED_HTTP",http_status=e.code,error=str(e)[:200])
+          except Exception as e:
+              receipt.update(status="BLOCKED_OR_REJECTED",error_type=type(e).__name__,error=str(e)[:300])
+          print(json.dumps(receipt,ensure_ascii=False,sort_keys=True))
+          (root/"E370_europepmc_receipt.json").write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          PY
+      - name: Temporarily upload public source and receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e370-europepmc-supplement
+          path: 901_e370_europepmc/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
