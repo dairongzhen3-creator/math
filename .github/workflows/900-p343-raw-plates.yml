@@ -1,0 +1,28 @@
+name: 900 P343C pinned crossfeeding plate source intake
+on:
+  push:
+    paths:
+      - '.github/workflows/900-p343-raw-plates.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-source-intake:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_900/P343_bounded_raw_plate_intake.py
+          persist-credentials: false
+      - name: Verify pinned Git blob signatures and OOXML CRC
+        run: python3 research_900/P343_bounded_raw_plate_intake.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 900-P343C-seven-XLSX-and-two-source-CSV
+          path: P343_AUTHOR_RAW/
+          retention-days: 7
+          if-no-files-found: error
