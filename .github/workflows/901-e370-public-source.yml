@@ -1,0 +1,63 @@
+name: 901 E370 public source bounded archive audit
+on:
+  push:
+    branches: ['cloud-public-sources-901-e370-20261107']
+    paths: ['.github/workflows/901-e370-public-source.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - name: Read two public research workbooks with source and identity checks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,hashlib,io,zipfile,json,pathlib,os,time
+          root=pathlib.Path('901_e370_public_source');root.mkdir(exist_ok=True)
+          specs=[
+            {'id':'batarseh_public_stream','name':'Replicate_AUC_Inhibition.xlsx','url':'https://datadryad.org/downloads/file_stream/4970708','max_bytes':1000000},
+            {'id':'batarseh_public_api','name':'Replicate_AUC_Inhibition.xlsx','url':'https://datadryad.org/api/v2/files/4970708/download','max_bytes':1000000},
+            {'id':'batra_pmc_supp','name':'supplementary_data_file_wrag039.xlsx','url':'https://pmc.ncbi.nlm.nih.gov/articles/instance/13007599/bin/supplementary_data_file_wrag039.xlsx','max_bytes':1000000}
+          ]
+          receipt={'project':901,'stage':'E370','run_id':os.environ.get('GITHUB_RUN_ID'),'only_public_no_credentials':True,'results':[]}
+          for spec in specs:
+            r={k:spec[k] for k in ['id','name','url']}
+            try:
+              req=urllib.request.Request(spec['url'],headers={'User-Agent':'AcademicReproducibilityResearch/1.0','Accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream;q=0.8,*/*;q=0.5'})
+              with urllib.request.urlopen(req,timeout=40) as resp:
+                body=resp.read(spec['max_bytes']+1)
+                r['http_status']=resp.status
+                r['final_url_host']=urllib.request.urlparse(resp.url).hostname if hasattr(urllib.request,'urlparse') else resp.url.split('/')[2]
+                r['content_type']=resp.headers.get('Content-Type','')[:120]
+              r['actual_size']=len(body)
+              r['actual_sha256']=hashlib.sha256(body).hexdigest()
+              r['actual_md5']=hashlib.md5(body).hexdigest()
+              if len(body)>spec['max_bytes']:raise ValueError('SIZE_GUARD')
+              if not body.startswith(bytes([80,75,3,4])):raise ValueError('NOT_XLSX_SIGNATURE')
+              with zipfile.ZipFile(io.BytesIO(body)) as z:
+                members=z.infolist()
+                if len(members)>500 or sum(m.file_size for m in members)>45000000:raise ValueError('ZIP_BOMB_GUARD')
+                if z.testzip() is not None:raise ValueError('ZIP_CRC_FAIL')
+                if not {'xl/workbook.xml','[Content_Types].xml'}.issubset(z.namelist()):raise ValueError('NOT_XLSX')
+                if any(m.filename.startswith('/') or '..' in m.filename.split('/') for m in members):raise ValueError('UNSAFE_PATH')
+                if any(m.filename.endswith('vbaProject.bin') for m in members):raise ValueError('UNEXPECTED_MACRO')
+                r['zip_members']=len(members)
+              (root/(spec['id']+'.xlsx')).write_bytes(body)
+              r['status']='PASS_XLSX_SOURCE_BYTES_CRC'
+            except urllib.error.HTTPError as exc:
+              r.update(status='BLOCKED_HTTP',http_status=exc.code,error=str(exc)[:160])
+            except Exception as exc:
+              r.update(status='BLOCKED_OR_REJECTED',error_type=type(exc).__name__,error=str(exc)[:200])
+            receipt['results'].append(r)
+            print(json.dumps(r,ensure_ascii=False,sort_keys=True))
+          (root/'E370_remote_receipt.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+      - name: Upload bounded public sources and truthful receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e370-public-source-intake
+          path: 901_e370_public_source/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
