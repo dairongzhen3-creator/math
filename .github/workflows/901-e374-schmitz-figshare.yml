@@ -1,0 +1,74 @@
+name: 901 E374 official Figshare raw supernatant assay audit
+on:
+  push:
+    branches: ['cloud-public-sources-901-e374-20261107']
+    paths: ['.github/workflows/901-e374-schmitz-figshare.yml']
+permissions: {}
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Download one public Figshare raw experimental dataset with official checksums
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.parse,hashlib,zipfile,io,pathlib,csv
+          root=pathlib.Path("901_e374_public_figshare");root.mkdir(exist_ok=True)
+          article_id=25187555
+          receipt={"project":901,"stage":"E374","article_id":article_id,"source":"https://figshare.com/articles/dataset/RawData_Experiments_Schmitz_etal/25187555","run_id":os.environ.get("GITHUB_RUN_ID"),"status":"NOT_ACQUIRED"}
+          try:
+              req=urllib.request.Request(f"https://api.figshare.com/v2/articles/{article_id}",headers={"User-Agent":"AcademicResearchReproducibility/1.0","Accept":"application/json"})
+              with urllib.request.urlopen(req,timeout=35) as res:
+                  m=json.loads(res.read(300000))
+              files=m.get("files",[])
+              receipt["title"]=m.get("title")
+              receipt["file_list"]=[{k:x.get(k) for k in ("id","name","size","supplied_md5","computed_md5","download_url")} for x in files]
+              assert len(files)>0 and len(files)<=4,"FILE_LIST_OUT_OF_BOUND"
+              hits=[x for x in files if x.get("id")==44466338]
+              assert len(hits)==1,"TARGET_FILE_ID_MISSING"
+              f=hits[0]
+              url=f.get("download_url","")
+              assert urllib.parse.urlparse(url).hostname in ("ndownloader.figshare.com","figshare.com"),"UNTRUSTED_DOWNLOAD_HOST"
+              expected=f.get("supplied_md5") or f.get("computed_md5")
+              assert expected and len(expected)==32,"OFFICIAL_MD5_NOT_AVAILABLE"
+              assert 0<int(f.get("size",0))<8000000,"UNBOUNDED_FILE"
+              req=urllib.request.Request(url,headers={"User-Agent":"AcademicResearchReproducibility/1.0"})
+              with urllib.request.urlopen(req,timeout=70) as res:
+                  body=res.read(8000001)
+                  receipt["http_status"]=res.status
+              receipt["bytes"]=len(body)
+              receipt["md5"]=hashlib.md5(body).hexdigest()
+              receipt["sha256"]=hashlib.sha256(body).hexdigest()
+              if len(body)>8000000:raise ValueError("FILE_SIZE_CAP_EXCEEDED")
+              if len(body)!=int(f["size"]):raise ValueError("SIZE_MISMATCH")
+              if receipt["md5"]!=expected:raise ValueError("FIGSHARE_MD5_MISMATCH")
+              suffix=pathlib.Path(f.get("name","")).suffix.lower()
+              if body.startswith(bytes([80,75,3,4])):
+                  with zipfile.ZipFile(io.BytesIO(body)) as z:
+                      infos=z.infolist()
+                      if len(infos)>3000 or sum(i.file_size for i in infos)>200000000:raise ValueError("ZIP_EXPANSION_GUARD")
+                      if any(i.filename.startswith("/") or ".." in i.filename.replace(chr(92),"/").split("/") for i in infos):raise ValueError("UNSAFE_ZIP_PATH")
+                      if z.testzip() is not None:raise ValueError("ZIP_CRC_FAILURE")
+                      receipt["zip_members"]=len(infos)
+                      receipt["file_index"]=[{"name":i.filename,"bytes":i.file_size} for i in infos][:120]
+              elif suffix in (".csv",".tsv",".txt"):
+                  sample=body[:2048].decode("utf-8-sig",errors="replace")
+                  receipt["first_lines"]=sample.splitlines()[:5]
+              filename="E374_official_figshare_"+str(f["id"])+suffix
+              (root/filename).write_bytes(body)
+              receipt.update(status="PASS_OFFICIAL_BYTES_MD5",stored_as=filename,official_md5=expected)
+          except Exception as e:
+              receipt.update(status="BLOCKED_OR_REJECTED",error_type=type(e).__name__,error=str(e)[:300])
+          print(json.dumps({k:v for k,v in receipt.items() if k!="file_index"},ensure_ascii=False))
+          print("index_sample",json.dumps(receipt.get("file_index",[])[:70],ensure_ascii=False))
+          (root/"E374_official_figshare_receipt.json").write_text(json.dumps(receipt,ensure_ascii=False,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          PY
+      - name: Archive official public bytes and receipt temporarily
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e374-schmitz-figshare-official
+          path: 901_e374_public_figshare/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
