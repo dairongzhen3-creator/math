@@ -1,0 +1,59 @@
+name: 901 E378 frozen public CFU source lineage audit
+on:
+  push:
+    branches: ['cloud-public-sources-901-e378-20261108']
+    paths: ['.github/workflows/901-e378-frozen-pnas-cfu.yml']
+permissions: {}
+jobs:
+  intake:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Bounded source read with Git blob SHA check
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,os,json,pathlib,csv,io
+          root=pathlib.Path('e378_public_cfu');root.mkdir()
+          commit='7b7c35dfd568a4e9a04d81b561c18282c0f55c6a'
+          names={
+            'all_interactions_cfus.csv':'11ffd8b472d2802d63e2fa974c6aaca1486406a7',
+            'all_interactions_cfus_with_stats.csv':'636debb4eeffe8a5e7cde73a9b1f356979af01d8',
+            'cfus_fresh_malate.csv':'f907cf21ce6585231a0a4c7bab1dde606601cde6',
+            'cfus_fresh_mannose.csv':'2e898830dcd65db4484c5487ed058fe204c5f3bb',
+            'cfus_spent_malate.csv':'81958d38ea4517fba8a9aae898c6353309c40efc',
+            'cfus_spent_mannose.csv':'d63bc489791e6086fded9b2997474c22ba1cfa65'
+          }
+          receipt={'source':'https://github.com/Mitri-lab/coexistence','pin_commit':commit,'project':901,'stage':'E378','run':os.environ.get('GITHUB_RUN_ID'),'records':[],'status':'NOT_VERIFIED'}
+          allpass=True
+          for name,expect in names.items():
+              url=f'https://raw.githubusercontent.com/Mitri-lab/coexistence/{commit}/data/5_interactions/{name}'
+              row={'name':name,'expected_git_blob_sha1':expect,'url':url}
+              try:
+                  request=urllib.request.Request(url,headers={'User-Agent':'OpenAcademicReproducibilityAudit/1.0'})
+                  with urllib.request.urlopen(request,timeout=40) as rsp:
+                      raw=rsp.read(300001);row['http_status']=rsp.status
+                  if len(raw)>300000:raise ValueError('SINGLE_CSV_SIZE_CAP')
+                  blob_sha=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+                  row.update(actual_git_blob_sha1=blob_sha,bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest())
+                  if blob_sha!=expect:raise ValueError('PINNED_GIT_BLOB_MISMATCH')
+                  txt=raw.decode('utf-8-sig'); csv_data=list(csv.reader(io.StringIO(txt)))
+                  if len(csv_data)<2:raise ValueError('EMPTY_CSV')
+                  row.update(status='PASS_GIT_BLOB_SHA1',data_rows=len(csv_data)-1,columns=csv_data[0])
+                  (root/name).write_bytes(raw)
+              except Exception as exc:
+                  allpass=False;row.update(status='BLOCKED_OR_REJECTED',error=type(exc).__name__+':'+str(exc)[:170])
+              receipt['records'].append(row)
+              print(json.dumps({k:v for k,v in row.items() if k!='columns'},ensure_ascii=False))
+          receipt['status']='PASS_6_OF_6_PINNED_GIT_BLOBS' if allpass else 'PARTIAL_OR_BLOCKED'
+          (root/'E378_remote_source_receipt.json').write_text(json.dumps(receipt,sort_keys=True,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          print('FINAL:',receipt['status'])
+          PY
+      - name: Upload public source snapshots and receipt temporarily
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e378-pnas-cfu-frozen-source
+          path: e378_public_cfu/
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
