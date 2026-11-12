@@ -1,0 +1,62 @@
+name: "901 E472 official bird alarm playback CSV source verification"
+on:
+  push:
+    branches:
+      - cloud-901-e472-bird-20261112
+    paths:
+      - .github/workflows/901-e472-bird-source.yml
+permissions:
+  contents: read
+jobs:
+  verified-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Fetch and MD5-check public Zenodo files (no credentials)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request, urllib.error, hashlib, json, pathlib, time
+          dest=pathlib.Path('e472_sources');dest.mkdir(exist_ok=True)
+          inputs=[
+            ('Experiment_2.csv','Experiment%202.csv','ffc46b73bd2a3dd743da21d28f1654d6'),
+            ('Experiment_3.csv','Experiment%203.csv','b4b8b824a021f66e0a53bc4b0bfc1e93')]
+          results={}
+          for local,remote,expected in inputs:
+            urls=[
+              'https://zenodo.org/records/4998041/files/'+remote+'?download=1',
+              'https://zenodo.org/records/4998041/files/'+remote,
+              'https://zenodo.org/api/records/4998041/files/'+remote+'/content',
+            ]
+            attempts=[]
+            for u in urls:
+              try:
+                req=urllib.request.Request(u,headers={'User-Agent':'901-E472-academic-source-audit/1.0'})
+                with urllib.request.urlopen(req,timeout=16) as f:
+                  data=f.read(100000)
+                  status=f.status
+                md5=hashlib.md5(data).hexdigest()
+                if md5 != expected:
+                  attempts.append({'url':u,'status':status,'nbytes':len(data),'md5':md5,'verdict':'REJECT_CHECKSUM'})
+                  continue
+                (dest/local).write_bytes(data)
+                attempts.append({'url':u,'status':status,'nbytes':len(data),'md5':md5,'verdict':'PASS'})
+                break
+              except Exception as e:
+                attempts.append({'url':u,'error':type(e).__name__+': '+str(e)[:220]})
+            results[local]={'expected_md5':expected,'verified':(dest/local).exists(),'attempts':attempts}
+            print('E472_SOURCE',local,json.dumps(results[local],ensure_ascii=False))
+          (dest/'source_receipt.json').write_text(json.dumps(results,indent=2,ensure_ascii=False),encoding='utf-8')
+          if not all(v['verified'] for v in results.values()):
+            print('E472_VERDICT INCOMPLETE_PUBLIC_SOURCE')
+          else:
+            print('E472_VERDICT BOTH_OFFICIAL_CSV_MD5_VERIFIED')
+          PY
+      - name: Retain verified source or failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e472-farrow-official-source
+          path: e472_sources/
+          if-no-files-found: error
+          retention-days: 21
