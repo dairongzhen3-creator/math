@@ -76,7 +76,7 @@ jobs:
           x=s.get(api,timeout=25);x.raise_for_status();j=x.json()
           original=s.get(j['download_url'],timeout=35);original.raise_for_status()
           b=original.content
-          git_sha=hashlib.sha1((f'blob {len(b)}\\0').encode()+b).hexdigest()
+          git_sha=hashlib.sha1((f'blob {len(b)}').encode()+bytes([0])+b).hexdigest()
           if git_sha!=j['sha']:raise RuntimeError('PUBLIC_GITHUB_GIT_BLOB_SHA_MISMATCH')
           if b'CP016816' not in b[:2000] or b'ORIGIN' not in b:raise RuntimeError('GENBANK_LOCUS_MISSING')
           (d/'syn3A_CP016816_GenBank_source.gb').write_bytes(b)
