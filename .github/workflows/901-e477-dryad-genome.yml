@@ -87,41 +87,35 @@ jobs:
           (d/'syn3A_source_receipt.json').write_text(json.dumps(info,indent=2))
           print('E477_GENOME_PASS',json.dumps(info))
           PY
-      - name: Set up R for real paired-cell source conversion
+      - name: Set up R for paired-cell original data conversion
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: '4.4.2'
           use-public-rspm: true
-      - name: Extract row-paired mother/daughter original RDS frames without reshuffling
+      - name: Export true pair-aligned mother and daughter tables
         shell: bash
         run: |
           cat > /tmp/e477_pair_export.R <<'RS'
           options(digits=17)
-          d <- 'e477_intake'
-          for (file in c('Data_Figure_1_Constitutive_cells.rds','Data_Figure_1_RpoS_cells.rds')) {
-            f <- file.path(d,file)
-            if(!file.exists(f)){cat('E477_RDS_MISSING',file,'\\n');next}
-            obj <- readRDS(f)
-            if(!is.list(obj) || length(obj)!=2 || !is.data.frame(obj[[1]]) || !is.data.frame(obj[[2]])) stop('Unexpected paired RDS format')
-            if(nrow(obj[[1]])!=nrow(obj[[2]])) stop('Unmatched paired frame row counts')
-            for(i in 1:2){
-              z<-obj[[i]]; z$source_row_index<-seq_len(nrow(z))
-              fn<-paste0(sub('\\\\.rds
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: 901-e477-internal-official-source-audit
-          path: e477_intake/
-          retention-days: 21
-          if-no-files-found: error
-,'',file),'_part',i,'.csv')
-              write.csv(z,file.path(d,fn),row.names=FALSE,na='')
-              cat('E477_RDS_EXPORTED',file,'part',i,'rows',nrow(z),'columns',paste(names(z),collapse='|'),'\\n')
+          directory <- "e477_intake"
+          sources <- c("Data_Figure_1_Constitutive_cells.rds","Data_Figure_1_RpoS_cells.rds")
+          for (src in sources) {
+            orig <- file.path(directory, src)
+            if (!file.exists(orig)) { cat("E477_RDS_MISSING",src,"\n");next }
+            ob <- readRDS(orig)
+            stopifnot(is.list(ob),length(ob)==2,is.data.frame(ob[[1]]),is.data.frame(ob[[2]]))
+            stopifnot(nrow(ob[[1]])==nrow(ob[[2]]))
+            for (i in seq_len(2)) {
+              dat <- ob[[i]]
+              dat[["source_row_index"]] <- seq_len(nrow(dat))
+              outname <- paste0(substr(src,1,nchar(src)-4),"_part",i,".csv")
+              write.csv(dat,file.path(directory,outname),row.names=FALSE,na="")
+              cat("E477_RDS_EXPORT",src,"part",i,"rows",nrow(dat),"cols",paste(names(dat),collapse="|"),"\n")
             }
           }
           RS
           Rscript /tmp/e477_pair_export.R
-      - name: Upload downloaded verified files and receipts
+      - name: Upload verified original sources and receipts
         if: always()
         uses: actions/upload-artifact@v4
         with:
