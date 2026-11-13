@@ -1,0 +1,94 @@
+name: "901 E477 official Dryad data access and pinned minimal genome source"
+on:
+  push:
+    branches: [cloud-901-e477-internal-20261113]
+    paths: [.github/workflows/901-e477-dryad-genome.yml]
+permissions:
+  contents: read
+jobs:
+  public-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Check official Dryad API metadata and attempt limited public RDS
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,pathlib,hashlib,json,urllib.parse
+          d=pathlib.Path('e477_intake');d.mkdir(exist_ok=True)
+          s=requests.Session()
+          s.headers.update({'User-Agent':'901-E477-public-data-acquisition/1.0','Accept':'application/json'})
+          out={'target':'doi:10.5061/dryad.9s4mw6mqg','requests':[],'selected':{}}
+          def query(url):
+            try:
+              resp=s.get(url,timeout=22,allow_redirects=True)
+              out['requests'].append({'url':url,'status':resp.status_code,'resolved_url':resp.url,'content_type':resp.headers.get('Content-Type'),'size':len(resp.content)})
+              print('E477_DRYAD_HTTP',resp.status_code,resp.url,'bytes',len(resp.content))
+              return resp.json() if resp.ok and 'json' in resp.headers.get('Content-Type','').lower() else None
+            except Exception as e:
+              out['requests'].append({'url':url,'error':type(e).__name__+': '+str(e)[:160]})
+              print('E477_DRYAD_ERROR',str(e)[:160]);return None
+          prefix='https://datadryad.org/api/v2'
+          doi='doi%3A10.5061%2Fdryad.9s4mw6mqg'
+          ds=query(f'{prefix}/datasets/{doi}')
+          vs=query(f'{prefix}/datasets/{doi}/versions')
+          if ds:out['dataset']={'id':ds.get('id'),'title':ds.get('title'),'versionNumber':ds.get('versionNumber'),'doi':ds.get('identifier')}
+          def flatten(j):
+            if not j:return []
+            if isinstance(j,list):return j
+            embedded=j.get('_embedded') or {}
+            for v in embedded.values():
+              if isinstance(v,list):return v
+            return j.get('items') or j.get('data') or []
+          versions=flatten(vs)
+          out['versions']=[{'id':v.get('id'),'versionNumber':v.get('versionNumber')} for v in versions]
+          v_id=sorted((v for v in versions if v.get('id')),key=lambda x:x.get('versionNumber') or 0)[-1]['id'] if versions else None
+          if v_id is not None:
+            files=query(f'{prefix}/versions/{v_id}/files?per_page=200')
+            fl=flatten(files)
+            out['file_catalog']=[{'id':f.get('id'),'path':f.get('path'),'size':f.get('size'),'digest':f.get('digest')} for f in fl]
+            wanted={'Data_Figure_1_Constitutive_cells.rds','Data_Figure_1_RpoS_cells.rds'}
+            for f in fl:
+              name=f.get('path','').split('/')[-1]
+              if name not in wanted:continue
+              fid=f.get('id')
+              u=f'{prefix}/files/{fid}/download'
+              try:
+                r=s.get(u,timeout=35,allow_redirects=True,headers={'Accept':'application/octet-stream'})
+                b=r.content
+                good=(r.status_code==200 and len(b)>100000 and len(b)<6000000 and b[:1]!=b'<')
+                out['selected'][name]={'source_file_id':fid,'status':r.status_code,'len':len(b),'sha256':hashlib.sha256(b).hexdigest(),'valid_binary_shape':good,'final_host':urllib.parse.urlparse(r.url).netloc}
+                if good:(d/name).write_bytes(b)
+                print('E477_DRYAD_RDS',name,r.status_code,len(b),good)
+              except Exception as e:out['selected'][name]={'error':type(e).__name__+': '+str(e)[:160]}
+          (d/'dryad_official_access_receipt.json').write_text(json.dumps(out,indent=2,ensure_ascii=False))
+          PY
+      - name: Pin and acquire complete official open-source genome
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,pathlib,json
+          d=pathlib.Path('e477_intake');d.mkdir(exist_ok=True)
+          repo='Luthey-Schulten-Lab/Minimal_Cell_4DWCM'
+          path='input_data/syn3A.gb'
+          api=f'https://api.github.com/repos/{repo}/contents/{path}'
+          s=requests.Session();s.headers.update({'User-Agent':'901-E477-public-genome-sequence-audit/1.0'})
+          x=s.get(api,timeout=25);x.raise_for_status();j=x.json()
+          original=s.get(j['download_url'],timeout=35);original.raise_for_status()
+          b=original.content
+          git_sha=hashlib.sha1((f'blob {len(b)}\\0').encode()+b).hexdigest()
+          if git_sha!=j['sha']:raise RuntimeError('PUBLIC_GITHUB_GIT_BLOB_SHA_MISMATCH')
+          if b'CP016816' not in b[:2000] or b'ORIGIN' not in b:raise RuntimeError('GENBANK_LOCUS_MISSING')
+          (d/'syn3A_CP016816_GenBank_source.gb').write_bytes(b)
+          info={'public_source_url':j['html_url'],'raw_url':j['download_url'],'github_blob_sha':j['sha'],'computed_git_blob_sha':git_sha,'size':len(b),'sha256':hashlib.sha256(b).hexdigest(),'declared_size':j['size'],'pass':True}
+          (d/'syn3A_source_receipt.json').write_text(json.dumps(info,indent=2))
+          print('E477_GENOME_PASS',json.dumps(info))
+          PY
+      - name: Upload downloaded verified files and receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e477-internal-official-source-audit
+          path: e477_intake/
+          retention-days: 21
+          if-no-files-found: error
