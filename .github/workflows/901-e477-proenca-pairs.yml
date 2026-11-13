@@ -1,0 +1,109 @@
+name: "901 E477 official Proenca mother-daughter paired fluorescence intake"
+on:
+  push:
+    branches: [cloud-901-e477-internal-20261113]
+    paths: [.github/workflows/901-e477-proenca-pairs.yml]
+permissions:
+  contents: read
+jobs:
+  public-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Acquire public Zenodo record and verify original checksums
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib, json, hashlib, requests, urllib.parse
+          d=pathlib.Path('e477_source'); d.mkdir(exist_ok=True)
+          u='https://zenodo.org/api/records/11029360'
+          a=requests.get(u,timeout=35,headers={'User-Agent':'901-E477-public-academic-source-audit/1.0'})
+          print('METADATA_HTTP',a.status_code,'BYTES',len(a.content))
+          a.raise_for_status()
+          meta=a.json()
+          files=meta.get('files',[])
+          wanted={'Data_Figure_1_Constitutive_cells.rds','Data_Figure_1_RpoS_cells.rds',
+                  'Data_Figure_5_ConstGFP_polar_fluorescence.rds','Data_Figure_5_RpoS_polar_fluorescence.rds',
+                  'Metadata.xlsx','README.md'}
+          receipt={'record_id':meta.get('id'),'doi':meta.get('doi'),'selected_files':{},
+                   'record_file_count':len(files),'record_link':u}
+          for f in files:
+            name=f.get('key') or f.get('filename') or ''
+            if name not in wanted:continue
+            expected=f.get('checksum','')
+            url=f.get('links',{}).get('self') or f'https://zenodo.org/records/11029360/files/{urllib.parse.quote(name)}?download=1'
+            b=requests.get(url,timeout=50,headers={'User-Agent':'901-E477-public-academic-source-audit/1.0'})
+            data=b.content
+            md5=hashlib.md5(data).hexdigest()
+            declared=f.get('size')
+            ok=(b.status_code==200 and md5==expected.replace('md5:','') and len(data)==declared)
+            rec={'url':url,'http':b.status_code,'size':len(data),'listed_size':declared,'listed_checksum':expected,
+                 'md5':md5,'sha256':hashlib.sha256(data).hexdigest(),'passed':ok}
+            receipt['selected_files'][name]=rec
+            print('E477_FILE',name,json.dumps(rec,sort_keys=True))
+            if ok:(d/name).write_bytes(data)
+          receipt['both_paired_available']=all((d/f).exists() for f in
+                  ['Data_Figure_1_Constitutive_cells.rds','Data_Figure_1_RpoS_cells.rds'])
+          (d/'source_receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True))
+          (d/'public_record_files.json').write_text(json.dumps([{'name':f.get('key'),'size':f.get('size'),
+                                     'checksum':f.get('checksum')} for f in files],indent=2))
+          print('E477_VERDICT',receipt['both_paired_available'])
+          PY
+      - name: Check R runtime
+        shell: bash
+        run: |
+          command -v Rscript || true
+          Rscript --version 2>&1 || true
+      - name: Provide R runtime if absent
+        if: always()
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.2'
+          use-public-rspm: true
+      - name: Convert verified paired RDS to row-aligned flat CSV and audit keys
+        shell: bash
+        run: |
+          cat > /tmp/e477_extract.R <<'RS'
+          options(digits=17)
+          d<-"e477_source"
+          datasets<-c("Data_Figure_1_Constitutive_cells.rds",
+                      "Data_Figure_1_RpoS_cells.rds",
+                      "Data_Figure_5_ConstGFP_polar_fluorescence.rds",
+                      "Data_Figure_5_RpoS_polar_fluorescence.rds")
+          desc<-list()
+          for (file in datasets) {
+            path<-file.path(d,file)
+            if (!file.exists(path)) { desc[[file]]<-list(status="not_acquired");next }
+            x<-readRDS(path)
+            entry<-list(status="parsed",top_class=class(x),
+                        component_count=length(x),components=list())
+            for (i in seq_along(x)) {
+              a<-x[[i]]
+              cc<-list(class=class(a),nrow=if(is.data.frame(a))nrow(a) else NA,
+                       ncol=if(is.data.frame(a))ncol(a) else NA,
+                       colnames=if(is.data.frame(a))names(a) else NULL)
+              if(is.data.frame(a)){
+                a$source_row_index<-seq_len(nrow(a))
+                out<-file.path(d,sub("\\.rds$","",file))
+                out<-paste0(out,"_part",i,".csv")
+                write.csv(a,out,row.names=FALSE,na="")
+                cc$derived_file<-basename(out)
+                cc$missing_by_column<-sapply(a,function(v)sum(is.na(v)))
+                print("E477_R_COMPONENT",file,i,"rows",nrow(a),"columns",paste(names(a),collapse="|"))
+              } else print("E477_R_NONFRAME",file,i,class(a),length(a))
+              entry$components[[as.character(i)]]<-cc
+            }
+            desc[[file]]<-entry
+          }
+          capture.output(str(desc,max.level=3),file=file.path(d,"source_rds_structure.txt"))
+          writeLines(paste("R_VERSION",R.version.string),file.path(d,"R_runtime.txt"))
+          RS
+          Rscript /tmp/e477_extract.R
+      - name: Upload verified source and derived row-preserving tables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e477-Proenca-original-and-rowaligned
+          path: e477_source/
+          if-no-files-found: error
+          retention-days: 21
