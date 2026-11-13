@@ -44,7 +44,7 @@ jobs:
           out['versions']=[{'id':v.get('id'),'versionNumber':v.get('versionNumber')} for v in versions]
           print('E477_DRYAD_VERSIONS_SAMPLE',json.dumps(vs,ensure_ascii=False)[:5000])
           viable=[v for v in versions if isinstance(v,dict) and v.get('id')]
-          v_id=sorted(viable,key=lambda x:x.get('versionNumber') or 0)[-1]['id'] if viable else None
+          v_id=(sorted(viable,key=lambda x:x.get('versionNumber') or 0)[-1]['id'] if viable else (int(versions[-1].get('_links',{}).get('self',{}).get('href','/0').split('/')[-1]) if versions else None))
           if v_id is not None:
             files=query(f'{prefix}/versions/{v_id}/files?per_page=200')
             fl=flatten(files)
