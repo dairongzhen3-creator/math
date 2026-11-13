@@ -53,15 +53,16 @@ jobs:
             for f in fl:
               name=f.get('path','').split('/')[-1]
               if name not in wanted:continue
-              fid=f.get('id')
-              u=f'{prefix}/files/{fid}/download'
+              fid=f.get('id') or int(f.get('_links',{}).get('self',{}).get('href','/0').split('/')[-1])
+              href=f.get('_links',{}).get('stash:download',{}).get('href')
+              u=urllib.parse.urljoin('https://datadryad.org',href) if href else f'{prefix}/files/{fid}/download'
               try:
                 r=s.get(u,timeout=35,allow_redirects=True,headers={'Accept':'application/octet-stream'})
                 b=r.content
-                good=(r.status_code==200 and len(b)>100000 and len(b)<6000000 and b[:1]!=b'<')
+                good=(r.status_code==200 and len(b)==f.get('size') and hashlib.sha256(b).hexdigest()==f.get('digest'))
                 out['selected'][name]={'source_file_id':fid,'status':r.status_code,'len':len(b),'sha256':hashlib.sha256(b).hexdigest(),'valid_binary_shape':good,'final_host':urllib.parse.urlparse(r.url).netloc}
                 if good:(d/name).write_bytes(b)
-                print('E477_DRYAD_RDS',name,r.status_code,len(b),good)
+                print('E477_DRYAD_RDS',name,r.status_code,len(b),good,'FILE_ID',fid,'DOWNLOAD',u[:170])
               except Exception as e:out['selected'][name]={'error':type(e).__name__+': '+str(e)[:160]}
           (d/'dryad_official_access_receipt.json').write_text(json.dumps(out,indent=2,ensure_ascii=False))
           PY
@@ -86,6 +87,40 @@ jobs:
           (d/'syn3A_source_receipt.json').write_text(json.dumps(info,indent=2))
           print('E477_GENOME_PASS',json.dumps(info))
           PY
+      - name: Set up R for real paired-cell source conversion
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.2'
+          use-public-rspm: true
+      - name: Extract row-paired mother/daughter original RDS frames without reshuffling
+        shell: bash
+        run: |
+          cat > /tmp/e477_pair_export.R <<'RS'
+          options(digits=17)
+          d <- 'e477_intake'
+          for (file in c('Data_Figure_1_Constitutive_cells.rds','Data_Figure_1_RpoS_cells.rds')) {
+            f <- file.path(d,file)
+            if(!file.exists(f)){cat('E477_RDS_MISSING',file,'\\n');next}
+            obj <- readRDS(f)
+            if(!is.list(obj) || length(obj)!=2 || !is.data.frame(obj[[1]]) || !is.data.frame(obj[[2]])) stop('Unexpected paired RDS format')
+            if(nrow(obj[[1]])!=nrow(obj[[2]])) stop('Unmatched paired frame row counts')
+            for(i in 1:2){
+              z<-obj[[i]]; z$source_row_index<-seq_len(nrow(z))
+              fn<-paste0(sub('\\\\.rds
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-e477-internal-official-source-audit
+          path: e477_intake/
+          retention-days: 21
+          if-no-files-found: error
+,'',file),'_part',i,'.csv')
+              write.csv(z,file.path(d,fn),row.names=FALSE,na='')
+              cat('E477_RDS_EXPORTED',file,'part',i,'rows',nrow(z),'columns',paste(names(z),collapse='|'),'\\n')
+            }
+          }
+          RS
+          Rscript /tmp/e477_pair_export.R
       - name: Upload downloaded verified files and receipts
         if: always()
         uses: actions/upload-artifact@v4
