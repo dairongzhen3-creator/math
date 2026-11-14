@@ -1,0 +1,61 @@
+name: "901 E485 Royal Society publisher-linked Figshare original tables"
+on:
+  push:
+    branches: [cloud-901-e485-independent-source-20261114]
+    paths: [".github/workflows/901-e485-figshare-original.yml"]
+permissions:
+  contents: read
+jobs:
+  official-publisher-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Get exact linked Figshare publisher collection and verify original bytes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,pathlib,json,zipfile,io
+          base='https://api.figshare.com/v2'
+          s=requests.Session();s.headers.update({'User-Agent':'901-E485-peer-reviewed-public-supplemental-source-audit/1.0'})
+          d=pathlib.Path('e485_figshare');d.mkdir(exist_ok=True)
+          out={'collection':4949670,'source_doi':'10.1098/rspb.2020.0569','checks':[],'articles':[],'verified_files':[]}
+          a=s.get(base+'/collections/4949670/articles',timeout=20)
+          out['collection_response']={'status':a.status_code,'size':len(a.content)}
+          print('E485_COLLECTION',a.status_code,a.text[:200])
+          if a.ok:
+            articles=a.json() if isinstance(a.json(),list) else a.json().get('articles',[])
+            for item in articles[:40]:
+              idx=item.get('id'); x=s.get(base+f'/articles/{idx}',timeout=20)
+              if not x.ok:continue
+              det=x.json()
+              out['articles'].append({'id':idx,'title':det.get('title'),'doi':det.get('doi'),'files':[{'name':f.get('name'),'id':f.get('id'),'size':f.get('size'),'md5':f.get('supplied_md5')} for f in det.get('files',[])]})
+              for f in det.get('files',[]):
+                if not f.get('name','').lower().endswith('.xlsx') or f.get('size',0)>2000000:continue
+                url=f.get('download_url') or f'https://figshare.com/ndownloader/files/{f["id"]}'
+                rec={'article_id':idx,'name':f['name'],'file_id':f['id'],'url':url,'expected_size':f.get('size'),'published_md5':f.get('supplied_md5')}
+                try:
+                  b=s.get(url,timeout=30).content
+                  ok=(len(b)==f['size'] and zipfile.is_zipfile(io.BytesIO(b)))
+                  if ok:
+                    with zipfile.ZipFile(io.BytesIO(b)) as z:
+                      ok='[Content_Types].xml' in z.namelist() and z.testzip() is None
+                  rec.update({'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'md5':hashlib.md5(b).hexdigest(),'valid_xlsx':ok})
+                  if f.get('supplied_md5'):ok=ok and rec['md5']==f['supplied_md5']
+                  rec['verified']=ok
+                  if ok:
+                    name=f"figshare_{idx}_{f['id']}_{f['name']}"
+                    (d/name).write_bytes(b);out['verified_files'].append(rec)
+                except Exception as e:rec['error']=str(e)[:200]
+                out['checks'].append(rec)
+                print('E485_FIGSHARE_FILE',json.dumps(rec)[:1000])
+          (d/'figshare_official_source_receipt.json').write_text(json.dumps(out,indent=2,ensure_ascii=False))
+          print('E485_FINAL',len(out['articles']),len(out['verified_files']))
+          PY
+      - name: Keep verified public originals and full receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E485-publisher-linked-figshare-files
+          path: e485_figshare/
+          if-no-files-found: error
+          retention-days: 21
