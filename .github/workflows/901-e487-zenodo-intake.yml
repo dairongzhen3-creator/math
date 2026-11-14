@@ -1,0 +1,64 @@
+name: "901 E487 Zenodo Julou official small-source intake"
+on:
+  push:
+    branches: [cloud-901-e487-julou-source-20261115]
+    paths: [".github/workflows/901-e487-zenodo-intake.yml"]
+permissions:
+  contents: read
+jobs:
+  source-intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download official small sources and independently check checksum
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,pathlib,json,re,zipfile,io,sys,time
+          root=pathlib.Path('E487_official_small_sources');root.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E487-independent-source-intake/1.0'
+          expected={'Julou_2020_lacInduction_assays.xlsx':'c5f6a8e32510454752f0e329c9fbc70e','Julou_2020_lacInduction_GL_Preproc_fileList.txt':'056598c59bf9027a98189c684ed8a592'}
+          result={'stage':'E487','source':'https://doi.org/10.5281/zenodo.3894719','utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'files':[]}
+          try:
+            r=s.get('https://zenodo.org/api/records/3894719',timeout=20)
+            result['metadata_status']=r.status_code
+            if r.ok:
+              j=r.json()
+              result['zenodo_files']=[{'key':x.get('key'),'size':x.get('size'),'checksum':x.get('checksum')} for x in j.get('files',[])]
+          except Exception as e:result['metadata_error']=repr(e)[:250]
+          for name,refmd5 in expected.items():
+            url='https://zenodo.org/records/3894719/files/'+name+'?download=1'
+            rec={'name':name,'url':url,'expected_md5':refmd5}
+            try:
+              r=s.get(url,timeout=55)
+              b=r.content
+              rec.update({'http_status':r.status_code,'bytes':len(b),'md5':hashlib.md5(b).hexdigest(),'sha256':hashlib.sha256(b).hexdigest(),'type':r.headers.get('Content-Type')})
+              ok=r.status_code==200 and rec['md5']==refmd5
+              if name.endswith('.xlsx') and ok:
+                with zipfile.ZipFile(io.BytesIO(b)) as z:
+                  ok=(z.testzip() is None and '[Content_Types].xml' in z.namelist())
+                rec['xlsx_crc_pass']=ok
+              if name.endswith('.txt') and ok:
+                t=b.decode('utf-8')
+                rec['last_line']=t.splitlines()[-1]
+                rec['lane_file_count']=len(re.findall(r'_frames\\.txt$',t,re.M))
+                rec['date_directory_count']=len(re.findall(r'(?m)^[├└]── \\d{8} -> ',t))
+                ok=ok and '36 directories, 1058 files' in t
+              rec['verified']=ok
+              if ok:(root/name).write_bytes(b)
+            except Exception as e:rec['error']=repr(e)[:300]
+            result['files'].append(rec)
+            print('E487_INTAKE',json.dumps(rec))
+          result['all_pass']=all(r.get('verified') for r in result['files'])
+          (root/'source_receipt.json').write_text(json.dumps(result,indent=2,ensure_ascii=False))
+          print('E487_PASS',result['all_pass'])
+          if not result['all_pass']:sys.exit(2)
+          PY
+      - name: Keep source originals and signed checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E487-Julou-official-small-sources
+          path: E487_official_small_sources/
+          if-no-files-found: error
+          retention-days: 21
