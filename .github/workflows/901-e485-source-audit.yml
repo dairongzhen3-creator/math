@@ -1,0 +1,76 @@
+name: "901 E485 independent microscopy data intake"
+on:
+  push:
+    branches: [cloud-901-e485-independent-source-20261114]
+    paths: [".github/workflows/901-e485-source-audit.yml"]
+permissions:
+  contents: read
+jobs:
+  verified-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Acquire published 2020 daughter-pair tables with source and byte audit
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests, pathlib, hashlib, json, zipfile, io, time
+          root=pathlib.Path('e485_original');root.mkdir(exist_ok=True)
+          s=requests.Session();s.headers.update({'User-Agent':'901-E485-independent-original-publication-audit/1.0'})
+          cases=[
+            ('rspb20200569supp3.xlsx','Raw_data_for_figure_2b._Supplemental_Material..xlsx','346238'),
+            ('rspb20200569supp4.xlsx','Raw_data_for_figure_3a._Supplemental_material.xlsx','346237'),
+            ('rspb20200569supp5.xlsx','Raw_data_for_figures_3b-6._Supplemental_Material..xlsx','346239'),
+          ]
+          report={'study_doi':'10.1098/rspb.2020.0569','dryad_doi':'10.6075/J0542M0K','files':{},'methods':[]}
+          api='https://datadryad.org/api/v2/datasets/doi%3A10.6075%2FJ0542M0K'
+          try:
+            a=s.get(api,timeout=15);report['dryad_api']={'url':api,'status':a.status_code,'body_start':a.text[:400]}
+          except Exception as e:report['dryad_api_error']=repr(e)
+          for pub,official,fid in cases:
+            rec={'official_name':official,'attempts':[],'verified_source':False}
+            tries=[
+              'https://pmc.ncbi.nlm.nih.gov/articles/PMC7282926/bin/'+pub,
+              'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7282926/supplementaryFiles?filename='+pub,
+              'https://datadryad.org/downloads/file_stream/'+fid,
+            ]
+            for url in tries:
+              d={'url':url}
+              try:
+                r=s.get(url,timeout=25,allow_redirects=True)
+                raw=r.content
+                d.update({'http':r.status_code,'bytes':len(raw),'content_type':r.headers.get('Content-Type'),
+                          'final_host':r.url.split('/')[2]})
+                valid=(r.status_code==200 and 3000<len(raw)<4000000 and raw[:2]==b'PK' and zipfile.is_zipfile(io.BytesIO(raw)))
+                if valid:
+                  with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                    members=z.namelist()
+                    valid=('[Content_Types].xml' in members and any(x.startswith('xl/worksheets/') for x in members))
+                    d['zip_members']=len(members)
+                    d['crc_pass']=(z.testzip() is None)
+                    valid=valid and d['crc_pass']
+                d['original_xlsx']=valid
+                if valid:
+                  (root/pub).write_bytes(raw)
+                  d['sha256']=hashlib.sha256(raw).hexdigest()
+                  d['md5']=hashlib.md5(raw).hexdigest()
+                  rec['verified_source']=True;rec['selected_url']=url;rec['size']=len(raw)
+                  rec['sha256']=d['sha256'];rec['md5']=d['md5']
+                  rec['attempts'].append(d)
+                  break
+              except Exception as e:d['error']=type(e).__name__+': '+str(e)[:140]
+              rec['attempts'].append(d)
+            report['files'][pub]=rec
+            print('E485_SOURCE',pub,json.dumps(rec,ensure_ascii=False)[:1700])
+          report['files_acquired']=sum(x['verified_source'] for x in report['files'].values())
+          (root/'source_receipt.json').write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding='utf8')
+          print('E485_VERDICT',report['files_acquired'],'of',len(cases))
+          PY
+      - name: Upload public source audit and successful source files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E485-2020-official-daughter-original-tables
+          path: e485_original/
+          if-no-files-found: error
+          retention-days: 21
