@@ -1,0 +1,75 @@
+name: "901 E487 Julou 111MB official frame dataset audit"
+on:
+  push:
+    branches: [cloud-901-e487-julou-source-20261115]
+    paths: [".github/workflows/901-e487-julou-frames.yml"]
+permissions:
+  contents: read
+jobs:
+  frame-source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Fetch original 111MB archive, CRC and first-level field audit
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,pathlib,json,tarfile,time,collections,os,sys
+          root=pathlib.Path('E487_official_frame_audit');root.mkdir(exist_ok=True)
+          url='https://zenodo.org/records/3894719/files/Julou_2020_lacInduction_GL_Preproc.tar.gz?download=1'
+          expected_md5='02c8ce66d2603b8dbd6211794696aedd'
+          expected_nbytes=111442020
+          s=requests.Session();s.headers['User-Agent']='901-E487-public-source-frame-audit/1.0'
+          r=s.get(url,stream=True,timeout=110);r.raise_for_status()
+          target=root/'Julou_2020_lacInduction_GL_Preproc.tar.gz'
+          md5=hashlib.md5();sha=hashlib.sha256();n=0
+          with target.open('wb') as f:
+            for chunk in r.iter_content(1024*1024):
+              if chunk:
+                n+=len(chunk)
+                if n>expected_nbytes+100000:raise RuntimeError('size guard exceeded')
+                md5.update(chunk);sha.update(chunk);f.write(chunk)
+          checksum_ok=(n==expected_nbytes and md5.hexdigest()==expected_md5)
+          report={'dataset_doi':'10.5281/zenodo.3894719','source_url':url,'time_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'bytes':n,'md5':md5.hexdigest(),'sha256':sha.hexdigest(),'expected_md5':expected_md5,'checksum_ok':checksum_ok,'files':[],'nonregular':[]}
+          if not checksum_ok:raise RuntimeError('published source size / MD5 mismatch')
+          with tarfile.open(target,'r:gz') as tar:
+            for i,m in enumerate(tar):
+              if not m.isfile():
+                if len(report['nonregular'])<20:report['nonregular'].append({'name':m.name,'type':str(m.type)})
+                continue
+              h=tar.extractfile(m)
+              first=h.readline()
+              preview=[h.readline() for _ in range(3)]
+              rec={'path':m.name,'bytes_uncompressed':m.size,'first_line':first[:800].decode('utf-8','replace').rstrip(),'example_lines':[x[:300].decode('utf-8','replace').rstrip() for x in preview if x]}
+              # Source raw text file sizes are manageable; get every row count to check the time axis.
+              tail_count=0
+              for part in iter(lambda:h.read(1024*1024),b''):tail_count+=part.count(b'\\n')
+              rec['line_count_lower_bound']=1+sum(x.count(b'\\n') for x in preview)+tail_count
+              report['files'].append(rec)
+              if len(report['files'])%250==0:print('E487_SCANNED',len(report['files']),flush=True)
+          report['regular_count']=len(report['files'])
+          report['frame_file_count']=sum(x['path'].endswith('_frames.txt') for x in report['files'])
+          report['date_summary']={}
+          for x in report['files']:
+            b=os.path.basename(x['path'])
+            if b[:8].isdigit():
+              d=b[:8]
+              report['date_summary'].setdefault(d,{'file_count':0,'total_lines':0,'total_uncompressed_bytes':0})
+              report['date_summary'][d]['file_count']+=1
+              report['date_summary'][d]['total_lines']+=x['line_count_lower_bound']
+              report['date_summary'][d]['total_uncompressed_bytes']+=x['bytes_uncompressed']
+          report['date_count']=len(report['date_summary'])
+          (root/'frame_audit_report.json').write_text(json.dumps(report,indent=2,ensure_ascii=False))
+          # Do not upload the 111 MB original to GitHub artifact: later route source into 901 Drive independent big-data storage.
+          target.unlink()
+          print('E487_FRAME_SOURCE_SUMMARY',json.dumps({k:report[k] for k in ('bytes','md5','sha256','checksum_ok','regular_count','frame_file_count','date_count')}),flush=True)
+          if report['frame_file_count']<1000:sys.exit(3)
+          PY
+      - name: Persist small authoritative audit receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E487-Julou-111MB-source-and-fields-audit
+          path: E487_official_frame_audit/frame_audit_report.json
+          if-no-files-found: error
+          retention-days: 21
