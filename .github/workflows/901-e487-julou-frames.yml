@@ -43,8 +43,8 @@ jobs:
               rec={'path':m.name,'bytes_uncompressed':m.size,'first_line':first[:800].decode('utf-8','replace').rstrip(),'example_lines':[x[:300].decode('utf-8','replace').rstrip() for x in preview if x]}
               # Source raw text file sizes are manageable; get every row count to check the time axis.
               tail_count=0
-              for part in iter(lambda:h.read(1024*1024),b''):tail_count+=part.count(b'\\n')
-              rec['line_count_lower_bound']=1+sum(x.count(b'\\n') for x in preview)+tail_count
+              for part in iter(lambda:h.read(1024*1024),b''):tail_count+=part.count(b'\n')
+              rec['line_count_lower_bound']=1+sum(x.count(b'\n') for x in preview)+tail_count
               report['files'].append(rec)
               if len(report['files'])%250==0:print('E487_SCANNED',len(report['files']),flush=True)
           report['regular_count']=len(report['files'])
@@ -61,7 +61,7 @@ jobs:
           report['date_count']=len(report['date_summary'])
           (root/'frame_audit_report.json').write_text(json.dumps(report,indent=2,ensure_ascii=False))
           # Do not upload the 111 MB original to GitHub artifact: later route source into 901 Drive independent big-data storage.
-          target.unlink()
+          # Keep authenticated official bytes in the artifact for Drive permanent storage.
           print('E487_FRAME_SOURCE_SUMMARY',json.dumps({k:report[k] for k in ('bytes','md5','sha256','checksum_ok','regular_count','frame_file_count','date_count')}),flush=True)
           if report['frame_file_count']<1000:sys.exit(3)
           PY
@@ -69,7 +69,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 901-E487-Julou-111MB-source-and-fields-audit
-          path: E487_official_frame_audit/frame_audit_report.json
+          name: 901-E487-Julou-111MB-original-and-fields-audit
+          path: E487_official_frame_audit/
           if-no-files-found: error
           retention-days: 21
