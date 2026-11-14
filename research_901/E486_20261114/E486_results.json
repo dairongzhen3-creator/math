@@ -1,0 +1,26 @@
+{
+  "stage": "E486",
+  "date": "2026-11-14",
+  "n": 355,
+  "counts": {
+    "new": [
+      119,
+      58
+    ],
+    "old": [
+      147,
+      31
+    ]
+  },
+  "empirical_observed_mi_bit_per_sibling_pair": 0.022903370977813475,
+  "model": "common_age_independent_symmetric_binary_observation_flip_UNVERIFIED",
+  "epsilon_feasible_max": 0.1741573033707865,
+  "model_latent_mi_lower_at_epsilon0": 0.022903370977813475,
+  "model_latent_mi_upper_at_epsilon_max": 0.12931534899085906,
+  "source_355row_csv_sha256": "3fd9763b9b50135b5b3b2a97f5ffcf0936c87fabb2860d033998f0fb36c3a366",
+  "source_official_supp5_xlsx_sha256": "d9b5e2f74007d6ffe298bc94c39e2f554b17655b48565a5de96a1f3eb8595baf",
+  "identifiability": "NOT_POINT_IDENTIFIED",
+  "real_molecule_transfer_bit": "NOT_IDENTIFIED",
+  "status": "PUBLICATION_NO_GO",
+  "independent_biological_replicates_certified": false
+}
