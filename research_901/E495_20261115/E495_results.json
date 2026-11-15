@@ -1,0 +1,97 @@
+{
+  "project": 901,
+  "stage": "E495",
+  "date": "2026-11-15",
+  "study": "Kaiser et al. (2018) Nat Commun 9:212 DOI 10.1038/s41467-017-02505-0",
+  "frozen_E494_input_sha256": {
+    "E494_frozen_true_divisions_size_fluorescence_split.csv": "57cf0104f01fd93ba1ddde9da085c01b25d96851499828a84eca373a04a47c7a",
+    "E494_leave_date_out_mse.csv": "a74c4419a1efbae1a9b90d425f405051ace1e89833c869b5f97a50fd8bbf4a46",
+    "E494_results.json": "e1ee9497b3be0492281fede89d6f353d67f9ae5605c673ad8505d7fea0d8dd9d",
+    "PMC5768764_2018_fullTextXML.xml": "a3e5574d61551fad47044d61200455bac079847785f0927a24a3da4d3e8869d8",
+    "zenodo_746230_ReadMe.md": "4aa76d90746c50dbbdf11812962a38c55586428103bd97619f91e9c1162dbf30"
+  },
+  "experimental_observation_scope": {
+    "observed_divisions": 42658,
+    "dates": 27,
+    "lanes": 857,
+    "schema_counts": {
+      "dual": 26773,
+      "single": 15885
+    },
+    "E494_cross_date_MSE_not_rerun": true
+  },
+  "new_identity_gate": {
+    "formula": "strict raw processed optical fraction proxy model qF_pred=qL",
+    "total_sse_direct_identity": 59.42616340141819,
+    "total_sse_E494_frozen_date_heldout_constant": 57.91870915639058,
+    "total_sse_E494_frozen_date_heldout_regression": 46.03644658787605,
+    "mse_identity": 0.001393083674842191,
+    "mse_old_E494_baseline": 0.001357745537915293,
+    "mse_old_E494_linear": 0.0010791984290842527,
+    "relative_identity_error_increase_over_old_baseline": 0.02602706909363639,
+    "relative_identity_error_increase_over_old_fitted": 0.2908503545768537,
+    "n_dates_fitted_better_than_identity": 27,
+    "n_dates_identity_better_than_baseline": 12,
+    "slope_by_schema": {
+      "dual": {
+        "events": 26773,
+        "observed_slope_OLS": 0.4658131440568793,
+        "observed_intercept_OLS": 0.26429122085045914,
+        "ideal_identity_MSE": 0.0013735290485706396,
+        "source_optical_fluorescence_std": 0.03600187622203906,
+        "no_physical_volume_calibration": true
+      },
+      "single": {
+        "events": 15885,
+        "observed_slope_OLS": 0.5136082294435936,
+        "observed_intercept_OLS": 0.23963462680072434,
+        "ideal_identity_MSE": 0.0014260415602163335,
+        "source_optical_fluorescence_std": 0.03812625626774185,
+        "no_physical_volume_calibration": true
+      }
+    },
+    "daily_observed_slope_min_med_max": [
+      0.293084580373598,
+      0.49596459182252967,
+      0.7388001096401404
+    ],
+    "n_days_daily_slope_positive": 27,
+    "n_days_daily_slope_below_unity": 27,
+    "new_scientific_reading": "The exact-length-proxy equality qF=qL has worse out-of-date squared error than old source-only regression; not a test of true molecular binomial model, as qL is estimated length not calibrated cytoplasm volume."
+  },
+  "bounded_original_archive_access": {
+    "zenodo_record": 824793,
+    "dataset_file": "DIMM_MoMA_data.tar.gz",
+    "full_official_bytes": 4430365592,
+    "full_official_md5": "299f477f71067e764419381556ac8183",
+    "http_206_range_supported": true,
+    "compressed_bytes_probed": 50331648,
+    "archive_entries_seen": 6,
+    "first_three_regular_source_entries": [
+      "DIMM_MoMA_data/MoMA/lactose/ExportedCellStats_20150624_pos4_preproc_ready_GL15.txt",
+      "DIMM_MoMA_data/MoMA/lactose/ExportedCellStats_20150630_pos1_GL13.txt",
+      "DIMM_MoMA_data/MoMA/lactose/ExportedCellStats_20150630_pos2_GL14.txt"
+    ],
+    "preproc_or_357_pair_events_accessible_in_probed_prefix": false,
+    "full_archive_downloaded": false,
+    "full_archive_checksum_verified": false,
+    "caveat": "gzip-compressed tar is not demonstrated seekable at arbitrary member offsets; HTTP range alone does not yield a verified inner preproc file index. Do not claim data absent."
+  },
+  "original_paper_357_pair_test": {
+    "N": 357,
+    "author_original_fitted_lambda": 0.0361,
+    "author_95pct_posterior_interval": [
+      0.026,
+      0.112
+    ],
+    "source_357_pair_individual_values": "NOT_RECEIVED",
+    "author_method": "glucose-phase nonproduction; per-cell GFP extrapolated to birth after separately estimated loss; measured cytoplasm fraction and measurement noise",
+    "lambda_independent_replication": "NOT_DONE",
+    "cross_source_lambda_transfer": "NOT_QUALIFIED"
+  },
+  "physical_molecule_transfer_bit": "NOT_IDENTIFIED",
+  "protein_molecule_absolute_count": "NOT_IDENTIFIED",
+  "bit_per_second": "NOT_IDENTIFIED",
+  "bit_per_joule": "NOT_IDENTIFIED",
+  "research_status": "PUBLICATION_NO_GO"
+}
