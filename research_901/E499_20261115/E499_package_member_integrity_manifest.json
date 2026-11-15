@@ -1,0 +1,112 @@
+{
+  "project": 901,
+  "stage": "E499",
+  "date": "2026-11-15",
+  "experiment": "Gervais et al 2026 source-authenticated bleaching schedule",
+  "member_hash_algorithm": "SHA256",
+  "members": [
+    {
+      "name": "source_E498/Author_README.md",
+      "bytes": 24142,
+      "sha256": "20ed23f5cdf995ed22536ad487ed8df6f1a46ab51d954098e400efdb27c318af"
+    },
+    {
+      "name": "source_E498/E498_bleaching_per_cell_weighted_slopes.csv",
+      "bytes": 131162,
+      "sha256": "3e2a7c5a620d767ad9f0f2192f72008d52af90e0d0fd30d3eac188c0f0d0b45a"
+    },
+    {
+      "name": "source_E498/E498_original_to_csv_gzip_receipt.json",
+      "bytes": 2302,
+      "sha256": "78a2ab1c353b463cc8233f19d4990d12468a80bc91ac71fc86bc9a7454173b70"
+    },
+    {
+      "name": "source_E498/E498_results.json",
+      "bytes": 15732,
+      "sha256": "644838bc37b9a6a3a519f468470a12d622b3bbe07c435c65ba66dc19e3ac7632"
+    },
+    {
+      "name": "source_E498/Gervais_et_al_analysis.Rmd",
+      "bytes": 207248,
+      "sha256": "7f915a34db6c3326a0be833bc1c04e57127d90684ce281c9fe4b0cd65a48de70"
+    },
+    {
+      "name": "source_E498/myframes_bleaching.feather",
+      "bytes": 9171952,
+      "sha256": "6e1733d6b641f5a47dca2851520fb9a0edfed2aad6faecbaf1ec5eece99917f7"
+    },
+    {
+      "name": "source_E498/myframes_bleaching.feather.csv.gz",
+      "bytes": 1310183,
+      "sha256": "0a9b630b95af875ae6bba5be5bac5430acbf96cfcf4bc767576965e59f8251db"
+    },
+    {
+      "name": "analyze_e499_exposure_phase.py",
+      "bytes": 10488,
+      "sha256": "3964233a385a596feb1c3f519bb1f320842131f2bb759042cb20a323e9e61b84"
+    },
+    {
+      "name": "independent_qa_e499.py",
+      "bytes": 5614,
+      "sha256": "971fdaf52a63042201b5a46b73aba385796754897b902fac245c530be05c012d"
+    },
+    {
+      "name": "make_e499_report_and_package.py",
+      "bytes": 18809,
+      "sha256": "8e2fc6fb4806d07c2cc397ad0320fe4e84f71af7301348cd5bdcec5db1c06c07"
+    },
+    {
+      "name": "E499_results.json",
+      "bytes": 3108,
+      "sha256": "bd2a333002479fb0986e8dbf87c9fd66084fe898e66f1d50ae7fc37a73b7f765"
+    },
+    {
+      "name": "E499_independent_QA.json",
+      "bytes": 976,
+      "sha256": "61f7a904b0048e1c13729ec9cdb635b24361e413553a3ee36d1638dd2951db06"
+    },
+    {
+      "name": "E499_source_exposure_cadence.csv",
+      "bytes": 1442,
+      "sha256": "9d0179af2c51a86fe5d0246831fd90114f60d17f7ae596c58ce3fac5fb066db2"
+    },
+    {
+      "name": "E499_source_phase_probe_frequency_normalization.csv",
+      "bytes": 2050,
+      "sha256": "55fecaddb52183edf6deb07217a31ebb8660b94131dc431489577a604de495ce"
+    },
+    {
+      "name": "E499_all_cell_phase_exposure_normalized_slopes.csv",
+      "bytes": 207127,
+      "sha256": "621b35986d4c8334ba29f97cbdd3f8ee6860a88f457448d212671c31463eabf9"
+    },
+    {
+      "name": "E499_same_cell_both_phase_overlap.csv",
+      "bytes": 2250,
+      "sha256": "df1fb82612bd49148a280c4441de4aa99820e7c8a24bd010a3275396bd475bf4"
+    },
+    {
+      "name": "E499_source_qualification.csv",
+      "bytes": 1401,
+      "sha256": "20b0d669045250ce7fca1a62ab0d1b261842145cf499f2976c50fea182f6d561"
+    },
+    {
+      "name": "901_E499_正式科研阶段报告_20261115.md",
+      "bytes": 8390,
+      "sha256": "6ace8e24640a94fb244e1f3dcf482adde7f6b0982ce580722d2f97cbf646b8b4"
+    },
+    {
+      "name": "00_901_E499_最新接续卡_20261115.md",
+      "bytes": 2436,
+      "sha256": "c147f30bc0b4e98fb7eda584ef6784aa31cf776845ee0d838856f8a7cf406d8c"
+    },
+    {
+      "name": "README_REPRODUCE_E499.md",
+      "bytes": 1832,
+      "sha256": "bfc10f883f27e2247fcef7c0770fb3d87eaee67097b3a4a6d4ec9aafcbbd47b2"
+    }
+  ],
+  "independent_source_qa": true,
+  "physical_molecular_bits": "NOT_IDENTIFIED",
+  "full_original_842MB_provider_ZIP_downloaded": false
+}
