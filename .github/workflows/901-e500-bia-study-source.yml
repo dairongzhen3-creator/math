@@ -1,0 +1,68 @@
+name: "901 E500 BioImage Archive exact original microscopy metadata audit"
+on:
+  push:
+    branches: [cloud-901-e500-illumination-controls-20261115]
+    paths: [".github/workflows/901-e500-bia-study-source.yml"]
+permissions:
+  contents: read
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Fetch original source S-BIAD2506 metadata, no images or paid downloads
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,json,time,pathlib,hashlib,collections
+          root=pathlib.Path('e500_bia_source');root.mkdir(exist_ok=True)
+          session=requests.Session();session.headers.update({'User-Agent':'901-E500-BIA-original-microscopy-physical-metadata-audit/1.0'})
+          urls=[
+            'https://www.ebi.ac.uk/biostudies/api/v1/studies/S-BIAD2506/info',
+            'https://www.ebi.ac.uk/biostudies/api/v1/studies/S-BIAD2506',
+            'https://www.ebi.ac.uk/bioimage-archive/api/v1/studies/S-BIAD2506'
+          ]
+          receipt={'stage':'E500','study_accession':'S-BIAD2506','DOI':'10.6019/S-BIAD2506','requests':[],
+                   'utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+          def walk(o,prefix=''):
+            if isinstance(o,dict):
+              for k,v in o.items():
+                if k in ('file','fileName','path','filename','name','location','description','value'):
+                  if isinstance(v,(str,int,float)):
+                    yield (prefix+'.'+k,str(v)[:400])
+                if isinstance(v,(dict,list)):
+                  yield from walk(v,prefix+'.'+k)
+            elif isinstance(o,list):
+              for i,v in enumerate(o):
+                yield from walk(v,prefix+f'[{i}]')
+          for url in urls:
+            r={'url':url}
+            try:
+              res=session.get(url,stream=True,timeout=(20,60),allow_redirects=True)
+              r.update({'status':res.status_code,'ctype':res.headers.get('content-type'),'length_claim':res.headers.get('content-length'),'final_url':res.url})
+              data=bytearray()
+              for chunk in res.iter_content(128*1024):
+                if chunk:data.extend(chunk)
+                if len(data)>10*1024*1024:raise RuntimeError('metadata streaming cap 10MiB reached')
+              b=bytes(data);r['actual_bytes']=len(b);r['sha256']=hashlib.sha256(b).hexdigest()
+              if res.ok and ('json' in res.headers.get('content-type','').lower() or b[:1]==b'{'):
+                j=json.loads(b)
+                r['source_json_root_keys']=list(j.keys())
+                if len(b)<6*1024*1024:(root/('biostudies_'+('info' if url.endswith('/info') else 'study')+'.json')).write_bytes(b)
+                listed=list(walk(j));r['fields_seen_n']=len(listed)
+                interesting=[{'path':p,'value':v} for p,v in listed if any(x in v.lower() for x in ['bleach','no_light','no light','fluor','control','phototoxic','light','2020-01-28','20201008','exposure'])]
+                r['examples']=interesting[:100]
+                r['filelike_entries_count']=sum('/file' in k or '.path' in k for k,v in listed)
+                (root/('bialist_'+('info' if url.endswith('/info') else 'study')+'.json')).write_text(json.dumps({'accession':'S-BIAD2506','metadata_fields_n':len(listed),'examples':interesting[:500]},ensure_ascii=False,indent=2))
+            except Exception as e:r['error']=repr(e)[:500]
+            receipt['requests'].append(r)
+            print('BIA_E500',json.dumps({k:v for k,v in r.items() if k!='examples'},ensure_ascii=False)[:1900],flush=True)
+          (root/'E500_BIA_source_qualification.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E500-BIA-SBIAD2506-metadata-source
+          path: e500_bia_source/
+          if-no-files-found: error
+          retention-days: 21
