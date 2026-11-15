@@ -1,0 +1,20 @@
+{
+  "stage": "E492",
+  "source": "original verified PMC8165573 JATS XML Table 1 read independently of derived CSV",
+  "rows_exact_reparsed": 145,
+  "rows_match_csv": true,
+  "daughter_optical_pair_check": {
+    "2": {
+      "n": 16,
+      "median_red_fraction": "0.514191118652404243927247358",
+      "median_green_fraction": "0.4968450734870145171947091591"
+    },
+    "3": {
+      "n": 34,
+      "median_red_fraction": "0.4882195030483316026804636370",
+      "median_green_fraction": "0.4331843161655133842816648348"
+    }
+  },
+  "claim": "source numerical QA only, not independently acquired biology and not physically calibrated molecule counts",
+  "pass": true
+}
