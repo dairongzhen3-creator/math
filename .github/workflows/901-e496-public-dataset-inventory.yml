@@ -1,0 +1,62 @@
+name: "901 E496 archive qualification 2018 sister calibration versus 2026 new absolute protein data"
+on:
+  push:
+    branches: [cloud-901-e496-open-source-calibration-20261115]
+    paths: [".github/workflows/901-e496-public-dataset-inventory.yml"]
+permissions:
+  contents: read
+jobs:
+  qualify-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check official Zenodo deposit originals and small documentation without large downloads
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,pathlib,json,time,hashlib,zipfile,io,os
+          root=pathlib.Path('e496_source_inventory');root.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E496-molecular-inheritance-source-audit/1.0'
+          ids=[257566,746230,824793,18059846,18129207]
+          out={'stage':'901_E496','date_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+               'records':[],'download_cap_each':5_000_000,'no_multi_GB_download':True}
+          for rid in ids:
+            d={'record':rid}
+            try:
+              r=s.get('https://zenodo.org/api/records/'+str(rid),timeout=40)
+              d.update({'http':r.status_code,'http_size':len(r.content)})
+              if not r.ok:raise ValueError(r.text[:400])
+              j=r.json(); d.update({'record_id':j.get('id'),'doi':j.get('doi'),
+                                   'title':j.get('metadata',{}).get('title'),
+                                   'total_files':len(j.get('files',[])),
+                                   'publication_date':j.get('metadata',{}).get('publication_date')})
+              d['files']=[]
+              for f in j.get('files',[]):
+                val={'name':f.get('key'),'bytes':f.get('size'),'checksum':f.get('checksum'),
+                     'self_url':f.get('links',{}).get('self')}
+                d['files'].append(val)
+                if 0<f.get('size',0)<=out['download_cap_each'] and f.get('key','').lower().endswith(('.md','.txt','.csv','.json','.tsv','.r','.py','.yaml','.yml','.xlsx')):
+                  url=f.get('links',{}).get('self')
+                  if not url:continue
+                  try:
+                    z=s.get(url,timeout=30);b=z.content
+                    sha=hashlib.sha256(b).hexdigest();md5=hashlib.md5(b).hexdigest()
+                    verify=z.ok and len(b)==f.get('size') and (not f.get('checksum') or f['checksum']==('md5:'+md5))
+                    val.update({'actually_downloaded':verify,'actual_sha256':sha,'md5':md5})
+                    if verify:
+                      name='record'+str(rid)+'_'+os.path.basename(f['key']).replace('/','_')
+                      (root/name).write_bytes(b)
+                  except Exception as e:val['download_error']=repr(e)[:300]
+            except Exception as e:d['error']=repr(e)[:500]
+            out['records'].append(d)
+            print('E496_SOURCE_RECORD',json.dumps({k:v for k,v in d.items() if k!='files'},ensure_ascii=False)[:800],
+                  'files',json.dumps(d.get('files',[]),ensure_ascii=False)[:5000],flush=True)
+          (root/'E496_zenodo_2017_and_2026_official_inventory.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E496-official-2017-and-2026-source-inventory
+          path: e496_source_inventory/
+          retention-days: 21
+          if-no-files-found: error
