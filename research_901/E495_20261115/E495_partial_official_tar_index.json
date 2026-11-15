@@ -1,0 +1,50 @@
+{
+  "project": 901,
+  "stage": "E495",
+  "official_source_url": "https://zenodo.org/api/records/824793/files/DIMM_MoMA_data.tar.gz/content",
+  "official_original_md5": "299f477f71067e764419381556ac8183",
+  "original_bytes": 4430365592,
+  "purpose": "bounded compressed tar entry inspection, no full original acquisition or calibration fitted",
+  "max_compressed_read_bytes": 50331648,
+  "time_utc": "2026-11-15T13:04:39Z",
+  "members": [
+    {
+      "name": "DIMM_MoMA_data",
+      "size_bytes": 0,
+      "type": "5"
+    },
+    {
+      "name": "DIMM_MoMA_data/MoMA",
+      "size_bytes": 0,
+      "type": "5"
+    },
+    {
+      "name": "DIMM_MoMA_data/MoMA/lactose",
+      "size_bytes": 0,
+      "type": "5"
+    },
+    {
+      "name": "DIMM_MoMA_data/MoMA/lactose/ExportedCellStats_20150624_pos4_preproc_ready_GL15.txt",
+      "size_bytes": 56926933,
+      "type": "0"
+    },
+    {
+      "name": "DIMM_MoMA_data/MoMA/lactose/ExportedCellStats_20150630_pos1_GL13.txt",
+      "size_bytes": 55838802,
+      "type": "0"
+    },
+    {
+      "name": "DIMM_MoMA_data/MoMA/lactose/ExportedCellStats_20150630_pos2_GL14.txt",
+      "size_bytes": 59897325,
+      "type": "0"
+    }
+  ],
+  "outcome": "STREAM_CAPPED_OR_TRUNCATED",
+  "http_status": 206,
+  "content_range": "bytes 0-50331647/4430365592",
+  "content_length": "50331648",
+  "accept_ranges": "bytes",
+  "final_host": "zenodo.org",
+  "tar_stop_reason": "unexpected end of data",
+  "compressed_bytes_observed": 50331648
+}
