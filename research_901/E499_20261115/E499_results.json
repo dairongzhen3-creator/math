@@ -1,0 +1,68 @@
+{
+  "project": 901,
+  "stage": "E499",
+  "date": "2026-11-15",
+  "source_SHA256": {
+    "myframes_bleaching.feather.csv.gz": "0a9b630b95af875ae6bba5be5bac5430acbf96cfcf4bc767576965e59f8251db",
+    "myframes_bleaching.feather": "6e1733d6b641f5a47dca2851520fb9a0edfed2aad6faecbaf1ec5eece99917f7",
+    "E498_bleaching_per_cell_weighted_slopes.csv": "3e2a7c5a620d767ad9f0f2192f72008d52af90e0d0fd30d3eac188c0f0d0b45a",
+    "Gervais_et_al_analysis.Rmd": "7f915a34db6c3326a0be833bc1c04e57127d90684ce281c9fe4b0cd65a48de70",
+    "E498_results.json": "644838bc37b9a6a3a519f468470a12d622b3bbe07c435c65ba66dc19e3ac7632"
+  },
+  "original_bleaching_rows": 91838,
+  "source_cadence": {
+    "n_probe_date_groups": 7,
+    "n_phase_groups": 14,
+    "growth_nominal_min": 3,
+    "starvation_nominal_min": 12,
+    "fraction_native_gap_growth": 0.993126397905188,
+    "fraction_native_gap_starvation": 0.9897670642253206,
+    "duplicate_cell_time_keys": 0,
+    "source_actual_recorded_growth_to_starvation_frequency_ratio": 4
+  },
+  "source_author_existing_bleach_WLS": {
+    "n_cell_phase": 1659,
+    "n_positive": 1446,
+    "exact_phase_probe_date_groups": 7
+  },
+  "new_positive_only_comparison": {
+    "n_groups": 7,
+    "group_hourly_starve_over_growth_ratio_min_median_max": [
+      0.08292752063521855,
+      0.12874507549884273,
+      0.18334531940303067
+    ],
+    "group_per_frame_starve_over_growth_ratio_min_median_max": [
+      0.3317100825408742,
+      0.5149803019953709,
+      0.7333812776121227
+    ],
+    "groups_below_constant_per_frame_0p25_hourly": 7,
+    "groups_with_nonnegative_shared_dark_loss_under_same_cell_model": 0
+  },
+  "same_exact_cell_cross_phase": {
+    "n": 16,
+    "by_probe": {
+      "YFP": 9,
+      "GFP": 5,
+      "CFP": 2
+    },
+    "growth_hourly_greater": 14,
+    "growth_per_frame_greater": 13,
+    "both_positive": 9,
+    "same_cell_cross_phase_was_observed_in_3_of_7_probe_date_groups": true
+  },
+  "structural_identifiability": {
+    "design": "k_{date,probe,phase}=beta_{date,probe}*f_phase + d_{date,probe,phase}, with f_growth=20/h, f_starvation=5/h",
+    "linear_dependence": "f_phase = 20 - 15*I(starvation); phase and frequency perfectly collinear within dataset",
+    "actual_design_matrix_rank": 2,
+    "requested_design_columns": 3,
+    "physical_beta_vs_phase_loss": "NOT_SEPARATELY_IDENTIFIED",
+    "source_published_camera_exposure_time_and_excitation": "article Methods reports nominal settings but no per-cell photon dose/technical repeated same state at both frequencies",
+    "strict_extra_assumption_d_growth_equals_d_starvation_nonnegative": "not supported by source; negative residual for positive-only group medians is a sensitivity diagnostic, not physical negative rate"
+  },
+  "interpretation": "Source signal is author degradation-corrected; k per h is optical signal decrease, per-planned-frame representation only; neither true photobleaching yield per exposure nor protein degradation corrected in independent wet-lab manner",
+  "molecular_count_transfer_bits": "NOT_IDENTIFIED",
+  "bit_per_joule": "NOT_IDENTIFIED",
+  "publication": "PUBLICATION_NO_GO"
+}
