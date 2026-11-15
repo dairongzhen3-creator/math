@@ -1,0 +1,25 @@
+{
+  "project": 901,
+  "stage": "E500",
+  "QA_PASS": true,
+  "source_Feather_SHA": "5cb1850cb127a64bf5e3dffa4d4e13e7cc648f73af176f6d03cf4d0e1fa9bb7c",
+  "source_length_rows_reparsed_from_frozen_source_export": 71755,
+  "source_true_mother_IDs": 238,
+  "per_source_mother_all_fits_recomputed": 238,
+  "recomputed_author_11frames_R2_and_lags_exactly_match_source_first_parser": true,
+  "source_fit_rejection_counts": {
+    "R2_LE_0p8": 137,
+    "PASS_TRUE_SURVIVOR": 96,
+    "NO_OBSERVED_DIV": 3,
+    "PRUNED_OR_TOUCHTOP": 2
+  },
+  "passed_lag_by_condition_n": {
+    "M9_M9zero_60h": 58,
+    "M9_M9zero_60h_NO_LIGHT": 38
+  },
+  "passed_lag_median_by_condition_h": {
+    "M9_M9zero_60h": 8.400009205753378,
+    "M9_M9zero_60h_NO_LIGHT": 6.594991736582855
+  },
+  "source_note": "Independent stdlib numerical reconstruction from original Arrow row-preserving export; same source, not biological replicate; source Rmd original fits all cell ranks whereas this scoped analysis targets one mother cohort only"
+}
