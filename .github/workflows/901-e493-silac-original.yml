@@ -1,0 +1,73 @@
+name: "901 E493 TrIPP official SILAC Table S2 original byte intake"
+on:
+  push:
+    branches: [cloud-901-e493-tripp-silac-identifiability-20261115]
+    paths: [".github/workflows/901-e493-silac-original.yml"]
+permissions:
+  contents: read
+jobs:
+  source-intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Official EuropePMC source, original XLSX MD5 / SHA256, no invented records
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,zipfile,io,json,pathlib,time,sys
+          root=pathlib.Path("E493_TrIPP_SILAC_official");root.mkdir(exist_ok=True)
+          s=requests.Session();s.headers.update({"User-Agent":"901-E493-immutable-SILAC-source-qualification/1.0"})
+          url_list=[
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC7889982/bin/mmc2.xlsx",
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7889982/supplementaryFiles?filename=mmc2.xlsx"
+          ]
+          receipt={"article_pmcid":"PMC7889982","source_doi":"10.1016/j.isci.2021.102075",
+                   "file_name":"mmc2.xlsx","jats_expected_size":842092,"jats_expected_md5":"4d2104fd2a40a51bf21b8dddfc0f3428",
+                   "source_jats_sha256":"42d58f8db16d91fd09ed02ed3303c109d9bb8b84246c54e4d708bb21dab19903",
+                   "source_utc":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"attempts":[]}
+          found=None
+          for url in url_list:
+            rec={"url":url}
+            try:
+              r=s.get(url,stream=True,timeout=75)
+              buf=io.BytesIO()
+              for c in r.iter_content(512*1024):
+                if c:buf.write(c)
+                if buf.tell()>50000000:raise RuntimeError("source guard 50 MB exceeded")
+              payload=buf.getvalue()
+              rec.update({"http":r.status_code,"bytes":len(payload),"content_type":r.headers.get("content-type"),
+                          "sha256":hashlib.sha256(payload).hexdigest(),"final_host":r.url.split("/")[2]})
+              candidates=[("direct",payload)]
+              if zipfile.is_zipfile(io.BytesIO(payload)):
+                with zipfile.ZipFile(io.BytesIO(payload)) as z:
+                  rec["container_crc_pass"]=z.testzip() is None
+                  rec["container_members"]=len(z.namelist())
+                  rec["matching_entries"]=[n for n in z.namelist() if n.endswith("mmc2.xlsx")]
+                  for n in rec["matching_entries"]:
+                    candidates.append((n,z.read(n)))
+              for origin,b in candidates:
+                if len(b)==receipt["jats_expected_size"] and hashlib.md5(b).hexdigest()==receipt["jats_expected_md5"]:
+                  if zipfile.is_zipfile(io.BytesIO(b)):
+                    with zipfile.ZipFile(io.BytesIO(b)) as x:
+                      if x.testzip() is None and "[Content_Types].xml" in x.namelist():
+                        found=b;rec["selected_member"]=origin;rec["original_xlsx_sha256"]=hashlib.sha256(b).hexdigest()
+                        rec["original_xlsx_bytes"]=len(b);rec["verified_original"]=True;break
+              receipt["attempts"].append(rec)
+              if found is not None:break
+            except Exception as e:
+              rec["error"]=str(e)[:400];receipt["attempts"].append(rec)
+          receipt["SOURCE_VERIFIED"]=found is not None
+          if found is not None:
+            (root/"PMC7889982_TableS2_SILAC_original_mmc2.xlsx").write_bytes(found)
+          (root/"official_original_source_receipt.json").write_text(json.dumps(receipt,indent=2,ensure_ascii=False))
+          print("E493_SOURCE",json.dumps(receipt,ensure_ascii=False)[:8500],flush=True)
+          if found is None:sys.exit(2)
+          PY
+      - name: Retain verified original and all receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E493-TrIPP-published-1338-protein-SILAC-original-and-receipt
+          path: E493_TrIPP_SILAC_official/
+          if-no-files-found: error
+          retention-days: 21
