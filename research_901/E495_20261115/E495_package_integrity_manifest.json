@@ -1,0 +1,99 @@
+{
+  "stage": "E495",
+  "archive_name": "901_E495_分子标定源有限访问与体积分配代理检验_完整复现包_20261115.zip",
+  "archive_size_bytes": 1319954,
+  "archive_sha256": "615c2ac8453b8eadeca60e3568362950dc97e36826af87ce70ab323bf517db5b",
+  "members_count": 17,
+  "members": [
+    {
+      "name": "PMC5768764_2018_fullTextXML.xml",
+      "size_bytes": 211394,
+      "sha256": "a3e5574d61551fad47044d61200455bac079847785f0927a24a3da4d3e8869d8"
+    },
+    {
+      "name": "2018_JATS_source_receipt.json",
+      "size_bytes": 594,
+      "sha256": "b104cbc971b175ae0ccb9e3710caa286b790116d687468e921b166891886cd7e"
+    },
+    {
+      "name": "zenodo_746230_ReadMe.md",
+      "size_bytes": 4553,
+      "sha256": "4aa76d90746c50dbbdf11812962a38c55586428103bd97619f91e9c1162dbf30"
+    },
+    {
+      "name": "E495_partial_official_tar_index.json",
+      "size_bytes": 1466,
+      "sha256": "8e7cbc24c52879e275a72ca562819a71d2bc05c2e2fa56327c7dccc9ee6eb2b5"
+    },
+    {
+      "name": "E494_frozen_true_divisions_size_fluorescence_split.csv",
+      "size_bytes": 7896800,
+      "sha256": "57cf0104f01fd93ba1ddde9da085c01b25d96851499828a84eca373a04a47c7a"
+    },
+    {
+      "name": "E494_leave_date_out_mse.csv",
+      "size_bytes": 2101,
+      "sha256": "a74c4419a1efbae1a9b90d425f405051ace1e89833c869b5f97a50fd8bbf4a46"
+    },
+    {
+      "name": "E494_results.json",
+      "size_bytes": 4205,
+      "sha256": "e1ee9497b3be0492281fede89d6f353d67f9ae5605c673ad8505d7fea0d8dd9d"
+    },
+    {
+      "name": "E494_independent_QA.json",
+      "size_bytes": 755,
+      "sha256": "158dfa77cd44fef94012f1e41a615a5d0a692f30c772b43076c8c89e94b5ed73"
+    },
+    {
+      "name": "analyze_e495_physical_calibration_gate.py",
+      "size_bytes": 8445,
+      "sha256": "970b608c3c595a49ce5787ccb3e0d42220ecc06ac0de76ad8ed00bebc151d870"
+    },
+    {
+      "name": "independent_qa_e495.py",
+      "size_bytes": 4405,
+      "sha256": "450cc6ddc19e72f1d337a4b806b3c7fcb28b6e4338449cbe3f2c19827e7a9a0b"
+    },
+    {
+      "name": "E495_by_date_direct_identity_gate.csv",
+      "size_bytes": 5451,
+      "sha256": "175def5e88493c71b79b21f2e8f719d074e8fa03080ed9e4a5668c29ac199e2f"
+    },
+    {
+      "name": "E495_results.json",
+      "size_bytes": 4454,
+      "sha256": "bacc283790317c33734b60bbd13edec8073fbf1b692ba0da4d92061c5f25d765"
+    },
+    {
+      "name": "E495_independent_QA.json",
+      "size_bytes": 991,
+      "sha256": "fd4a89f9167bc731928cc66ba7a56710bcbc11471bc343b4226e452e4b84ecc6"
+    },
+    {
+      "name": "E495_source_qualification.csv",
+      "size_bytes": 1447,
+      "sha256": "548dbf4175dce5b3a26b20e34a00253dd39b1fbf45d3407fc7d64fcbca1add79"
+    },
+    {
+      "name": "901_E495_正式科研阶段报告_20261115.md",
+      "size_bytes": 9160,
+      "sha256": "fe6f333cd46fb51729662b53820bd311b79a14482c288b34b32884a57d9f95c3"
+    },
+    {
+      "name": "00_901_E495_最新接续卡_20261115.md",
+      "size_bytes": 3208,
+      "sha256": "29d5d877a857213c0052c3fb5cd177484b94c99d73be661d50def911b6356769"
+    },
+    {
+      "name": "README_REPRODUCE_E495.md",
+      "size_bytes": 2643,
+      "sha256": "4150acbb6607b2d2d12b26680ecb76a7ee2e478987b6d38ad30cbbcc1c69440e"
+    }
+  ],
+  "original_2018_357_sibling_values": "NOT_ACQUIRED",
+  "2018_4p43GB_official_data_original": "ONLY_FIRST_48_MiB_OF_COMPRESSED_BYTES_INSPECTED",
+  "independent_QA_PASS": true,
+  "zip_CRC_PASS": true,
+  "publication": "PUBLICATION_NO_GO"
+}
