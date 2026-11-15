@@ -1,0 +1,22 @@
+{
+  "project": 901,
+  "stage": "E500",
+  "independent_Arrow_read_direct_302MB_original": true,
+  "author_Feather_sha256": "5cb1850cb127a64bf5e3dffa4d4e13e7cc648f73af176f6d03cf4d0e1fa9bb7c",
+  "original_Arrow_rows": 1011012,
+  "row_count_hitting_selection": 71755,
+  "fully_independent_source_key_count": 238,
+  "source_event_fate_238_identity_and_raw_values_exact_match": true,
+  "source_fate_counts": {
+    "('M9_M9zero_60h', 'Survive')": 85,
+    "('M9_M9zero_60h', 'Unknown')": 6,
+    "('M9_M9zero_60h', 'No Growth')": 100,
+    "('M9_M9zero_60h_NO_LIGHT', 'Survive')": 43,
+    "('M9_M9zero_60h_NO_LIGHT', 'No Growth')": 4
+  },
+  "source_microscope_positions": 24,
+  "treatment_appears_in_both_states_at_same_position": false,
+  "QA_PASS": true,
+  "scope": "Second direct source Arrow record batch parser, independent of first pandas route, not independent wet lab or camera-dose calibration",
+  "timestamp": "2026-11-15T15:55:29Z"
+}
