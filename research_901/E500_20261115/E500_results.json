@@ -1,0 +1,86 @@
+{
+  "study": "Gervais et al 2026 Molecular Systems Biology DOI 10.1038/s44320-026-00226-5",
+  "stage": "E500",
+  "official_original_sha256": "5cb1850cb127a64bf5e3dffa4d4e13e7cc648f73af176f6d03cf4d0e1fa9bb7c",
+  "official_original_feather_rows": 1011012,
+  "acquisition_dates": [
+    "20221220"
+  ],
+  "illuminated": {
+    "n": 191,
+    "survived": 85,
+    "unknown": 6,
+    "rate": 0.44502617801047123,
+    "microscope_positions": 18
+  },
+  "no_fluorescence_excitation": {
+    "n": 47,
+    "survived": 43,
+    "unknown": 0,
+    "rate": 0.9148936170212766,
+    "microscope_positions": 6
+  },
+  "overall_regrowth_fraction_gap_dark_minus_illuminated": 0.46986743901080535,
+  "risk_ratio_dark_to_illuminated": 2.055819774718398,
+  "source_4_strains": [
+    {
+      "strain": "E08_GFP",
+      "illuminated_mothers": 35,
+      "illuminated_regrew": 19,
+      "illuminated_unknown": 3,
+      "no_fluorescence_excitation_mothers": 16,
+      "no_fluorescence_excitation_regrew": 14,
+      "absolute_regrowth_gap_no_light_minus_lit": 0.3321428571428572
+    },
+    {
+      "strain": "E08_GFP_pl",
+      "illuminated_mothers": 56,
+      "illuminated_regrew": 23,
+      "illuminated_unknown": 1,
+      "no_fluorescence_excitation_mothers": 8,
+      "no_fluorescence_excitation_regrew": 7,
+      "absolute_regrowth_gap_no_light_minus_lit": 0.4642857142857143
+    },
+    {
+      "strain": "rplN_GFP",
+      "illuminated_mothers": 31,
+      "illuminated_regrew": 13,
+      "illuminated_unknown": 1,
+      "no_fluorescence_excitation_mothers": 13,
+      "no_fluorescence_excitation_regrew": 13,
+      "absolute_regrowth_gap_no_light_minus_lit": 0.5806451612903225
+    },
+    {
+      "strain": "rplN_GFP_pl",
+      "illuminated_mothers": 69,
+      "illuminated_regrew": 30,
+      "illuminated_unknown": 1,
+      "no_fluorescence_excitation_mothers": 10,
+      "no_fluorescence_excitation_regrew": 9,
+      "absolute_regrowth_gap_no_light_minus_lit": 0.46521739130434786
+    }
+  ],
+  "all_strain_conditional_gaps_positive": true,
+  "stratified_mantel_haenszel_odds_ratio_no_light_over_lit": 11.967736020038648,
+  "stratified_mantel_haenszel_test_p_iid_assumption": 4.115601426324389e-08,
+  "source_cell_level_fisher_exact_p_iid_assumption": 1.0592220155581004e-09,
+  "unknown_fate_treatment_sensitivity": {
+    "unknown_as_nonregrow": 0.46986743901080535,
+    "unknown_as_regrow": 0.43845382644536035,
+    "unknown_excluded": 0.4554341575618171
+  },
+  "position_bootstrap_10000_descriptive_gap_quantiles": [
+    0.39657151699072435,
+    0.4692982456140351,
+    0.5436598927955311
+  ],
+  "position_resampling_seed": 901500,
+  "physical_position_assignment_confounded": true,
+  "treatment": "NO_LIGHT=without fluorescence excitation during starvation; source still has phase contrast time-lapse imaging",
+  "source_assumption": "Source author classified GM.2 resumed divisions from cells existing before regrowth switch as regrowth; no source randomization of microscope positions demonstrated.",
+  "inference": "Strong same-date observational fluorescence illumination/regrowth association across four reporter strains, NOT independent biological replication, NOT causal per-photon phototoxicity, NOT bleaching rate, not molecule count.",
+  "molecular_transfer_MI": "NOT_IDENTIFIED",
+  "bit_per_second": "NOT_IDENTIFIED",
+  "bit_per_joule": "NOT_IDENTIFIED",
+  "publication": "PUBLICATION_NO_GO"
+}
