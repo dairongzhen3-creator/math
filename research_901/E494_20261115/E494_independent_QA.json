@@ -1,0 +1,18 @@
+{
+  "stage": "E494",
+  "passed": true,
+  "n_source_events": 42658,
+  "n_original_feature_keys": 55411,
+  "n_heldout_event_keys": 42658,
+  "n_dates": 27,
+  "source_lanes": 857,
+  "n_non_length_ties": 35718,
+  "n_sign_direction_match": 24087,
+  "independent_direct_pearson": 0.45398524924513645,
+  "independent_heldout_mse_gain_fraction": 0.2051541331218364,
+  "heldout_days_mse_improves": 27,
+  "independent_heldout_optical_log_score_gain_per_event": 0.07648491646662568,
+  "heldout_days_optical_log_score_positive": 26,
+  "method": "stdlib CSV streaming and independent sufficient-statistic calculations; no primary pandas/numpy imported; same laboratory observations; no real technical calibration",
+  "physical_protein_transfer_bits": "NOT_IDENTIFIED"
+}
