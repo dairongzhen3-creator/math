@@ -1,0 +1,65 @@
+name: "901 E495 bounded Zenodo original 4.43GB tar header stream audit"
+on:
+  push:
+    branches: [cloud-901-e495-calibration-stream-20261115]
+    paths: [".github/workflows/901-e495-bounded-tar-headers.yml"]
+permissions:
+  contents: read
+jobs:
+  bounded-source-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check HTTP partial reads and process no more than 48MiB of compressed official original
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,tarfile,io,os,time,json,hashlib,pathlib
+          out=pathlib.Path('901_E495_bounded_source_probe');out.mkdir(exist_ok=True)
+          src="https://zenodo.org/api/records/824793/files/DIMM_MoMA_data.tar.gz/content"
+          report={"project":901,"stage":"E495","official_source_url":src,"official_original_md5":"299f477f71067e764419381556ac8183","original_bytes":4430365592,
+                  "purpose":"bounded compressed tar entry inspection, no full original acquisition or calibration fitted",
+                  "max_compressed_read_bytes":48*1024*1024,"time_utc":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),
+                  "members":[],"outcome":None}
+          headers={'Range':'bytes=0-50331647','User-Agent':'901-E495-open-science-bounded-tar-headers/1.0'}
+          class Bounded(io.RawIOBase):
+            def __init__(self,stream,maxbytes):self.stream=stream;self.maxbytes=maxbytes;self.n=0
+            def readable(self):return True
+            def read(self,size=-1):
+              if self.n>=self.maxbytes:return b''
+              n=min(self.maxbytes-self.n,65536 if size<0 else max(1,size))
+              raw=self.stream.read(n);self.n+=len(raw);return raw
+          try:
+            with requests.get(src,headers=headers,stream=True,timeout=(25,75),allow_redirects=True) as resp:
+              report.update({"http_status":resp.status_code,"content_range":resp.headers.get("Content-Range"),
+                             "content_length":resp.headers.get("Content-Length"),
+                             "accept_ranges":resp.headers.get("Accept-Ranges"),"final_host":resp.url.split("/")[2]})
+              resp.raise_for_status()
+              resp.raw.decode_content=False
+              limited=Bounded(resp.raw,48*1024*1024)
+              try:
+                with tarfile.open(fileobj=limited,mode="r|gz") as tf:
+                  for i,member in enumerate(tf):
+                    report['members'].append({"name":member.name,"size_bytes":member.size,"type":member.type.decode('ascii','replace') if isinstance(member.type,bytes) else member.type})
+                    if i>=500:report['outcome']="REACHED_MAX_MEMBER_COUNT";break
+                    if limited.n>=47*1024*1024:report['outcome']="REACHED_COMPRESSED_BYTE_CAP";break
+                if not report.get('outcome'):report['outcome']="EARLY_ARCHIVE_END"
+              except (OSError,EOFError,tarfile.ReadError) as e:
+                report["outcome"]="STREAM_CAPPED_OR_TRUNCATED"
+                report["tar_stop_reason"]=str(e)[:500]
+              report["compressed_bytes_observed"]=limited.n
+          except Exception as e:
+            report["outcome"]="SOURCE_NOT_ACCESSIBLE";report["error"]=type(e).__name__+": "+str(e)[:550]
+          (out/'E495_partial_official_tar_index.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          print("E495_BOUNDED_RESULT",json.dumps({k:v for k,v in report.items() if k!="members"},ensure_ascii=False))
+          print("E495_FIRST_15",json.dumps(report["members"][:15],ensure_ascii=False))
+          print("E495_LAST_12",json.dumps(report["members"][-12:],ensure_ascii=False))
+          PY
+      - name: Retain receipts only (no 4GB original)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E495-bounded-Zenodo-tar-structure-no-original
+          path: 901_E495_bounded_source_probe/
+          retention-days: 21
+          if-no-files-found: error
