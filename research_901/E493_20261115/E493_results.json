@@ -1,0 +1,129 @@
+{
+  "stage": "E493",
+  "source": "Auboiron et al iScience 2021 DOI 10.1016/j.isci.2021.102075",
+  "TableS2_source_sha256": "2ea57bedff6ccdd71ea982e695eea638cb6a815a1d2c8347b7ae91d8d8c21893",
+  "TableS2_source_md5": "4d2104fd2a40a51bf21b8dddfc0f3428",
+  "TableS2_original_bytes": 842092,
+  "TableS2_original_protein_rows": 1338,
+  "experimental_contexts": [
+    "CBF1 Dendra2 strain",
+    "HHO1 Dendra2 strain"
+  ],
+  "raw_ratios_time_grid_minutes": [
+    0,
+    30,
+    60,
+    90,
+    120,
+    150,
+    180
+  ],
+  "source_author_fitted_results_not_new_raw_protein_copy_counts": true,
+  "source_fit_validity_by_context": {
+    "cbf1": {
+      "valid_positive_count": 1337,
+      "nonpositive_or_invalid_count": 1,
+      "invalids": [
+        {
+          "protein_id": "P38719",
+          "gene": "DBP8",
+          "cbf1_half_life_min": -334.805011688277,
+          "cbf1_kd_per_min": -0.00207030108977373
+        }
+      ],
+      "fitted_slope_minus_kd_offset_per_min": 0.0025390006613917404,
+      "offset_range_maxmin": 1.1102230246251565e-16,
+      "max_half_life_times_kd_ln2_residual": 3.6637359812630166e-15,
+      "positive_half_life_median_min": 86.5444803337802
+    },
+    "hho1": {
+      "valid_positive_count": 1336,
+      "nonpositive_or_invalid_count": 2,
+      "invalids": [
+        {
+          "protein_id": "P38801",
+          "gene": "LRP1",
+          "hho1_half_life_min": -4402.20668459335,
+          "hho1_kd_per_min": -0.000157454483676514
+        },
+        {
+          "protein_id": "Q12344",
+          "gene": "GYP5",
+          "hho1_half_life_min": -510.786467322679,
+          "hho1_kd_per_min": -0.00135701946880684
+        }
+      ],
+      "fitted_slope_minus_kd_offset_per_min": 0.0024235915404193994,
+      "offset_range_maxmin": 1.4224732503009818e-16,
+      "max_half_life_times_kd_ln2_residual": 3.552713678800501e-15,
+      "positive_half_life_median_min": 60.94552143419785
+    }
+  },
+  "paired_positive_half_life_count": 1335,
+  "paired_half_life_median_min": {
+    "CBF1": 86.5067343892557,
+    "HHO1": 60.9409440493205
+  },
+  "paired_half_life_quartiles_min": {
+    "CBF1": [
+      80.88924588590879,
+      96.06789206357655
+    ],
+    "HHO1": [
+      52.582900603674105,
+      80.75075107877825
+    ]
+  },
+  "paired_source_halflife_spearman": 0.3180161416297839,
+  "paired_source_halflife_pearson_log": 0.27464997787969897,
+  "fraction_positive_pairs_hho1_half_life_shorter": 0.8352059925093633,
+  "paired_hho1_to_cbf1_halflife_median_ratio": 0.6936582920626587,
+  "fraction_paired_within_twofold": 0.9310861423220974,
+  "fraction_paired_gt_twofold_divergence": 0.06891385767790262,
+  "under_fitted_exponential_model_median_old_label_survival_at_120min": {
+    "CBF1": 0.3823126283559094,
+    "HHO1": 0.25540886771487925
+  },
+  "data_interpretation": "Measured population pulse-SiLAC heavy/light ratios and derived apparent protein degradation half-lives; no per-mother daughter pairing. No assumption of two biological replicates.",
+  "molecular_mother_daughter_bit": "NOT_IDENTIFIED",
+  "tripp_single_lineage_optical_double_ratio": {
+    "source_xml_sha256": "6a59cfb29e1e933577a40b99de88e5ee4ed7cdf1e6b0355e371d8a08fd9b6667",
+    "physical_lineages": 1,
+    "matched_three_cell_frames": 34,
+    "matched_total_m_daughter_frame_pairs": 84,
+    "metric": "log2[(raw_red_m/raw_green_m)/(raw_red_d/raw_green_d)]",
+    "interpretation": "A dimensionless raw spectral contrast at matched time; not per-cell old/new molecule or survival ratio",
+    "source_window_groups": {
+      "daughter1_before_daughter2": {
+        "n_matched_frames": 16,
+        "median_log2_spectral_contrast": 0.05054018862045913,
+        "positive_count": 12,
+        "median_positive_ratio": 1.0356526308938734
+      },
+      "daughter1_after_daughter2": {
+        "n_matched_frames": 34,
+        "median_log2_spectral_contrast": 0.28951940590516256,
+        "positive_count": 32,
+        "median_positive_ratio": 1.2222330566082904
+      },
+      "daughter2_after_birth": {
+        "n_matched_frames": 34,
+        "median_log2_spectral_contrast": 0.3067959983419243,
+        "positive_count": 31,
+        "median_positive_ratio": 1.2369575565954345
+      }
+    },
+    "identification_theorem": "With only raw per-cell mean intensities I_m,I_d>0, even if background=0 and gains equal, total mother share I_m/(I_m+A_d/A_m*I_d) takes every value strictly between 0 and 1 as unknown positive ROI area ratio varies. Thus no nontrivial molecular fraction bound follows.",
+    "unresolved": [
+      "ROI area",
+      "raw photon background",
+      "photoconversion efficiency",
+      "per-cell gain",
+      "absolute molecule number",
+      "technical repeats",
+      "n independent lineages"
+    ]
+  },
+  "study_public_data_statement": "All microscopy images and Perl and R scripts available upon request from Lead Contact; 18-protein BudJ raw CSV was not exposed by E492 public materials",
+  "publication": "PUBLICATION_NO_GO"
+}
