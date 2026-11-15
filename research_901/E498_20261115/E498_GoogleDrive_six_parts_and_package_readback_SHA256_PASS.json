@@ -1,0 +1,78 @@
+{
+  "stage": "E498",
+  "date": "2026-11-15",
+  "source_artifact_parts_verified": 6,
+  "source_original_and_export_artifact_SHA256_verified": 2,
+  "research_package_SHA256_verified": true,
+  "research_package_members_SHA256_verified": 31,
+  "ZIP_CRC_PASS": true,
+  "source_large_842MB_original_not_downloaded": true,
+  "source_original_4_selected_feather_member_sha256_crc_verified": true,
+  "cloud_full_readback_status": "PASS",
+  "checks": [
+    {
+      "source_part": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part001",
+      "cloud_materialized_path": "/mnt/data/p901_E498/cloud_readback/E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part001",
+      "bytes": 10000000,
+      "sha256": "cce5760b41924b64e2c9087224e4fd32896cc7038c51799006566210dd963b48",
+      "status": "PASS"
+    },
+    {
+      "source_part": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part002",
+      "cloud_materialized_path": "/mnt/data/p901_E498/cloud_readback/E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part002.bin",
+      "bytes": 10000000,
+      "sha256": "2a1a1ed5943245b9f7d014d8f27050005c2e307ccbb8b31d22ac546406ac8b4c",
+      "status": "PASS"
+    },
+    {
+      "source_part": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part003",
+      "cloud_materialized_path": "/mnt/data/p901_E498/cloud_readback/E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part003.bin",
+      "bytes": 10000000,
+      "sha256": "5ec22383108e400c8ac87202a18b1ef26416c5ddede46a160f91153dcaef4bee",
+      "status": "PASS"
+    },
+    {
+      "source_part": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part004",
+      "cloud_materialized_path": "/mnt/data/p901_E498/cloud_readback/E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part004.bin",
+      "bytes": 3347672,
+      "sha256": "e29678fe22930caf4a46a3e909a4d728c16e6cbbc451713c04eabfa4993119f9",
+      "status": "PASS"
+    },
+    {
+      "source_artifact": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip",
+      "bytes": 33347672,
+      "sha256": "7f9978cec027177d30277d7c50e87861d1cd8fcefc5cc1548f63cd433376df34",
+      "status": "PASS",
+      "ZIP_CRC_PASS": true
+    },
+    {
+      "source_part": "E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip.part001",
+      "cloud_materialized_path": "/mnt/data/p901_E498/cloud_readback/E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip.part001",
+      "bytes": 10000000,
+      "sha256": "5477d43116709a328bce0dde6ea90295cdab6ebad7c3a20b69fe5b962fa9c894",
+      "status": "PASS"
+    },
+    {
+      "source_part": "E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip.part002",
+      "cloud_materialized_path": "/mnt/data/p901_E498/cloud_readback/E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip.part002.bin",
+      "bytes": 6332774,
+      "sha256": "890fa565abe1497d73d0e3838d8ace4c0a74bf618d941ee340fb475aca7c9c57",
+      "status": "PASS"
+    },
+    {
+      "source_artifact": "E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip",
+      "bytes": 16332774,
+      "sha256": "04a3140ec724399c483674425f9ac727e7c25b00cc919cf184d3c6a1ac2deb6d",
+      "status": "PASS",
+      "ZIP_CRC_PASS": true
+    },
+    {
+      "research_package": "901_E498_饥饿蛋白降解漂白及物质时间账_完整研究过程包_20261115.zip",
+      "bytes": 16723696,
+      "sha256": "f3b54e0a5212924cd7523d850622df4bd45e1bd6ff8c8c763309043c27fae520",
+      "ZIP_CRC_PASS": true,
+      "member_hashes_verified": 31,
+      "status": "PASS"
+    }
+  ]
+}
