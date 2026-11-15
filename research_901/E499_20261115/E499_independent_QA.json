@@ -1,0 +1,23 @@
+{
+  "project": 901,
+  "stage": "E499",
+  "PASS": true,
+  "independent_source_gzip_rows": 91838,
+  "no_duplicate_true_source_cell_time": true,
+  "raw_cell_phase_groups": 2071,
+  "wls_cell_phase_n": 1659,
+  "every_source_E498_per_cell_WLS_recomputed_from_raw_rows": true,
+  "source_nominal_gap_phase_groups": 14,
+  "source_exact_3min_gaps": 18205,
+  "source_all_growth_gaps": 18331,
+  "source_exact_12min_gaps": 70705,
+  "source_all_starvation_gaps": 71436,
+  "new_observation_group_pairs": 7,
+  "positive_only_group_ratio_below_quarter_n": 7,
+  "group_ratio_median": 0.1287450754988428,
+  "same_cell_both_phases_with_6plus_frames": 16,
+  "same_cell_greater_loss_hour_n": 14,
+  "same_cell_greater_loss_per_planned_frame_n": 13,
+  "measurement_exposure_phase_collinearity": "rank-deficient; no same-phase cross-frequency treatment",
+  "source_scope": "Independent numerical source repeat on same original experimental data, not an independent camera dose or absolute molecules"
+}
