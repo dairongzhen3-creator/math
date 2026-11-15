@@ -1,0 +1,82 @@
+name: "901 E496 2026 842MB ZIP selective source extraction without full download"
+on:
+  push:
+    branches: [cloud-901-e496-open-source-calibration-20261115]
+    paths: [".github/workflows/901-e496-2026-selective-sources.yml"]
+permissions:
+  contents: read
+jobs:
+  selective-origin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Select 5 original subfiles by ZIP central directory HTTP ranges and verify CRC
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,struct,zlib,hashlib,json,time,pathlib
+          url='https://zenodo.org/api/records/18059846/files/Gervais2026_data.zip/content'
+          size=842127932;tail_len=2*1024*1024
+          out=pathlib.Path('e496_2026_selected_originals');out.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E496-molecule-time-tracking-remote-index-verified-source/1.0'
+          receipt={'source_url':url,'record':'18059846','article_doi':'10.1038/s44320-026-00226-5','original_archive_full_md5':'207baa767ed43b767f2c97d322866e2d','full_zip_was_downloaded':False,
+                    'date_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'source_files':[]}
+          def range_get(a,b,cap):
+            r=s.get(url,headers={'Range':f'bytes={a}-{b}'},timeout=(25,65),stream=True)
+            if r.status_code!=206 or r.headers.get('Content-Range')!=f'bytes {a}-{b}/{size}':
+              raise ValueError(f'HTTP strict partial fail {r.status_code}: {r.headers.get("Content-Range")}')
+            data=bytearray()
+            for c in r.iter_content(65536):
+              if c:data.extend(c)
+              if len(data)>cap:raise RuntimeError('range byte cap exceeded')
+            if len(data)!=(b-a+1):raise ValueError(('short-read',len(data),b-a+1))
+            return bytes(data)
+          z=range_get(size-tail_len,size-1,tail_len)
+          p=z.rfind(b'PK\x05\x06');assert p>=0
+          e=struct.unpack_from('<4s4H2IH',z,p);central_n=e[4];central_offset=e[6]
+          assert central_n==21 and central_offset>=size-tail_len
+          p=central_offset-(size-tail_len);members={}
+          for i in range(central_n):
+            h=struct.unpack_from('<4s6H3I5H2I',z,p);assert h[0]==b'PK\x01\x02'
+            nlen,elen,clen=h[10],h[11],h[12]
+            name=z[p+46:p+46+nlen].decode('utf8')
+            members[name]={'crc32':h[7],'compression_method':h[4],'compressed_size':h[8],'uncompressed_size':h[9],'header_offset':h[16]}
+            p+=46+nlen+elen+clen
+          wanted=[
+            'Gervais2026_data/Exported_data/mydegrates.feather',
+            'Gervais2026_data/Exported_data/myframes_bleaching.feather',
+            'Gervais2026_data/Exported_data/myproteomicsdata_multistrain.feather',
+            'Gervais2026_data/Gervais_et_al_analysis.Rmd',
+            'Gervais2026_data/README.md'
+          ]
+          for full in wanted:
+            m=members[full];off=m['header_offset']
+            head=range_get(off,off+511,512)
+            hd=struct.unpack_from('<4s5H3I2H',head,0)
+            assert hd[0]==b'PK\x03\x04'
+            local_nlen,local_elen=hd[-2:]
+            rawname=head[30:30+local_nlen].decode('utf8')
+            assert rawname==full,(rawname,full)
+            start=off+30+local_nlen+local_elen;comp=m['compressed_size']
+            assert 0<comp<4*1024*1024
+            b=range_get(start,start+comp-1,comp)
+            assert m['compression_method']==8
+            data=zlib.decompress(b,-15)
+            assert len(data)==m['uncompressed_size']
+            assert zlib.crc32(data)==m['crc32']
+            name=pathlib.PurePosixPath(full).name
+            (out/name).write_bytes(data)
+            receipt['source_files'].append({'name':full,'raw_size':len(data),'compressed_bytes_downloaded':len(b),'sha256':hashlib.sha256(data).hexdigest(),'crc32_hex':format(zlib.crc32(data),'08x'),'member_crc_verified':True,'header_offset':off})
+            print('E496_SOURCE_SELECTED',full,len(data),hashlib.sha256(data).hexdigest(),flush=True)
+          receipt['total_fetched_compressed_bytes']=sum(f['compressed_bytes_downloaded'] for f in receipt['source_files'])
+          receipt['entry_count_verified']=len(receipt['source_files'])
+          receipt['all_crc_pass']=True
+          (out/'E496_2026_selected_source_receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E496-2026-Gervais-5-selected-source-entries-original-CRCs
+          path: e496_2026_selected_originals/
+          retention-days: 21
+          if-no-files-found: error
