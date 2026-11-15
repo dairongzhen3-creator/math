@@ -1,0 +1,84 @@
+name: "901 E500 independent source Arrow scan and illumination fate verification"
+on:
+  push:
+    branches: [cloud-901-e500-illumination-controls-20261115]
+    paths: [".github/workflows/901-e500-independent-original-feather-qa.yml"]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: 901-E500-verified-original-illumination-control-and-true-fate
+          run-id: 43731881264
+          github-token: ${{ github.token }}
+          path: original
+      - run: python -m pip install -q pyarrow
+      - name: Independently iterate Arrow record-batches, compare exact cell IDs and fate to first parsing (no pandas)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pyarrow.feather as feather
+          import pathlib,csv,hashlib,json,collections,time
+          root=pathlib.Path('e500_qa');root.mkdir(exist_ok=True)
+          path=pathlib.Path('original/myframes_control.feather')
+          target='5cb1850cb127a64bf5e3dffa4d4e13e7cc648f73af176f6d03cf4d0e1fa9bb7c'
+          sha=hashlib.sha256()
+          with path.open('rb') as f:
+            for block in iter(lambda:f.read(1024*1024),b''):sha.update(block)
+          assert path.stat().st_size==302295912 and sha.hexdigest()==target
+          cols=['date','condition','strain','gl_id','cell','c_step','b_rank','end_type','time_start','time_end','m_start','m_end']
+          tab=feather.read_table(str(path),columns=cols)
+          assert tab.num_rows==1011012
+          found={}
+          rows_seen=0;eligible=0
+          for batch in tab.to_batches(max_chunksize=8192):
+            for rec in batch.to_pylist():
+              rows_seen+=1
+              if rec['c_step']!='GM.2':continue
+              if not (rec['time_start']<rec['m_start'] and rec['b_rank']==0):continue
+              eligible+=1
+              fate='Survive' if rec['end_type']=='div' else 'No Growth' if rec['end_type'] in ('eod','lysis') else 'Unknown'
+              if fate=='Unknown' and rec['time_end']>rec['m_start']+20*3600:fate='No Growth'
+              key=(str(rec['date']),str(rec['condition']),str(rec['cell']))
+              v=(rec['strain'],str(rec['gl_id']),str(rec['end_type']),fate,float(rec['time_start']),float(rec['time_end']),float(rec['m_start']),float(rec['m_end']))
+              if key in found:assert found[key]==v
+              found[key]=v
+          assert rows_seen==1011012 and len(found)==238
+          first={}
+          with pathlib.Path('original/E500_original_illumination_mother_fate_candidates.csv').open(newline='') as f:
+            for r in csv.DictReader(f):
+              key=(r['date'],r['condition'],r['cell'])
+              val=(r['strain'],r['gl_id'],r['end_type'],r['fate'],float(r['time_start']),float(r['time_end']),float(r['m_start']),float(r['m_end']))
+              assert key not in first;first[key]=val
+          assert first==found
+          counts=collections.Counter((k[1],v[3]) for k,v in found.items())
+          assert counts==collections.Counter({('M9_M9zero_60h','No Growth'):100,('M9_M9zero_60h','Survive'):85,('M9_M9zero_60h','Unknown'):6,
+              ('M9_M9zero_60h_NO_LIGHT','Survive'):43,('M9_M9zero_60h_NO_LIGHT','No Growth'):4})
+          positions=collections.defaultdict(set)
+          for k,v in found.items():
+            pos=v[1].split('.')[1];positions[pos].add('NO_LIGHT' in k[1])
+          assert len(positions)==24 and all(len(z)==1 for z in positions.values())
+          qa={'project':901,'stage':'E500','independent_Arrow_read_direct_302MB_original':True,
+              'author_Feather_sha256':target,'original_Arrow_rows':rows_seen,
+              'row_count_hitting_selection':eligible,'fully_independent_source_key_count':len(found),
+              'source_event_fate_238_identity_and_raw_values_exact_match':True,
+              'source_fate_counts':{str(k):v for k,v in counts.items()},
+              'source_microscope_positions':24,'treatment_appears_in_both_states_at_same_position':False,
+              'QA_PASS':True,
+              'scope':'Second direct source Arrow record batch parser, independent of first pandas route, not independent wet lab or camera-dose calibration',
+              'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+          (root/'E500_independent_Arrow_source_QA.json').write_text(json.dumps(qa,indent=2,ensure_ascii=False))
+          print('E500_SOURCE_INDEPENDENT_PASS',json.dumps(qa,ensure_ascii=False)[:2500],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E500-independent-direct-Arrow-1M-source-QA
+          path: e500_qa/
+          retention-days: 21
+          if-no-files-found: error
