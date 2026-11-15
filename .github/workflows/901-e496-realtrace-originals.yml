@@ -1,0 +1,64 @@
+name: "901 E496 2026 RealTrace original 2 cohorts, full source SHA and lineage schema"
+on:
+  push:
+    branches: [cloud-901-e496-open-source-calibration-20261115]
+    paths: [".github/workflows/901-e496-realtrace-originals.yml"]
+permissions:
+  contents: read
+jobs:
+  source-intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify original 2026 microfluidics repeats, inspect raw cell-ID and noise fields
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,pathlib,json,hashlib,io,zipfile,time,csv,os,math,collections
+          root=pathlib.Path('e496_2026_original_realtrace');root.mkdir(exist_ok=True)
+          base='https://zenodo.org/api/records/18129208/files/'
+          files=[
+           ('mother_machine_data_sets.zip',52912016,'e41663a407479bb4866e7d37f6daa928'),
+           ('replicates_hi1_rrnB.zip',16405453,'a49b0790f09718d28dec381fe9c8fdc3')
+          ]
+          s=requests.Session();s.headers['User-Agent']='901-E496-free-source-reproducibility/1.0'
+          report={'stage':'E496','source_doi':'10.5281/zenodo.18129208','date_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'files':[]}
+          for name,expected_size,expected_md5 in files:
+            url=base+name+'/content'
+            r=s.get(url,stream=True,timeout=(25,120),allow_redirects=True);r.raise_for_status()
+            b=bytearray()
+            for z in r.iter_content(512*1024):
+              if z:b.extend(z)
+              if len(b)>75_000_000:raise RuntimeError('individual source cap exceeded')
+            b=bytes(b)
+            md5=hashlib.md5(b).hexdigest();sha=hashlib.sha256(b).hexdigest()
+            assert len(b)==expected_size and md5==expected_md5,(name,len(b),md5)
+            with zipfile.ZipFile(io.BytesIO(b)) as z:
+              assert z.testzip() is None
+              inventory=[]
+              for info in z.infolist():
+                if info.is_dir():continue
+                rec={'name':info.filename,'uncompressed':info.file_size,'compressed':info.compress_size,'extension':pathlib.PurePosixPath(info.filename).suffix}
+                if info.file_size<600000000 and info.filename.lower().endswith(('.csv','.txt','.tsv','.md','.json','.r','.yaml','.yml')):
+                  with z.open(info) as f:
+                    preview=f.read(10000).decode('utf-8-sig','replace')
+                  arr=preview.splitlines()
+                  rec['first_lines']=arr[:min(3,len(arr))]
+                  rec['mentions_parent_id']='parent_id' in preview or 'mother_id' in preview
+                  rec['mentions_noise']='noise' in preview.lower() or 'cov_gg' in preview.lower()
+                inventory.append(rec)
+            (root/name).write_bytes(b)
+            report['files'].append({'name':name,'bytes':len(b),'md5':md5,'sha256':sha,'members_count':len(inventory),
+                                    'members':inventory})
+            print('REALTRACE_ORIGINAL',name,len(b),md5,sha,'members',len(inventory),
+                  'first',json.dumps(inventory[:5],ensure_ascii=False)[:2500],flush=True)
+          (root/'E496_original_realtrace_source_inventory.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+      - name: Preserve source files and verified ZIP bytes for investigator access
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E496-2026-RealTrace-two-cohorts-official-originals
+          path: e496_2026_original_realtrace/
+          retention-days: 21
+          if-no-files-found: error
