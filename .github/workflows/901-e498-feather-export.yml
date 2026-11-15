@@ -1,0 +1,56 @@
+name: "901 E498 exact Feather to CSV-gzip row-preserving cloud export"
+on:
+  push:
+    branches: [cloud-901-e498-starvation-degradation-20261115]
+    paths: [".github/workflows/901-e498-feather-export.yml"]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: 901-E498-four-verified-original-Gervais-Feather-and-inventory
+          run-id: 43725378533
+          path: original
+          github-token: ${{ github.token }}
+      - name: Install verified-source Feather reader
+        run: python -m pip install -q "pyarrow>=18" "pandas>=2"
+      - name: Extract selected original rows without reinterpreting/altering numerical values
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd,hashlib,json,gzip,time,os
+          P=Path('original');out=Path('E498_flat_export');out.mkdir(exist_ok=True)
+          sha={
+           'mydegrates.feather':'2a36a01facd1bf79ab0568e88cf07ff6cfebf099ecf9419ba85a0ead19cf7676',
+           'myframes_degradation.feather':'e005351f269c85804c57f5f28d893f1db3f353ed139da4069a87820d491a4131',
+           'myframes_bleaching.feather':'6e1733d6b641f5a47dca2851520fb9a0edfed2aad6faecbaf1ec5eece99917f7',
+           'myproteomicsdata_multistrain.feather':'d0e83674a86d248f29cf7404a86251faca98b76cb4102e528ab3c4d48cc37386'}
+          expected={'mydegrates.feather':4,'myframes_degradation.feather':1116240,
+                    'myframes_bleaching.feather':91838,'myproteomicsdata_multistrain.feather':130200}
+          receipt={'stage':'E498','utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+                   'original_feather_sha_verified':True,'source_rows_exact_preserved':True,
+                   'files':[],'conversion':'pandas.read_feather -> CSV gzip float_format %.17g, no rows filtered or sorted'}
+          for name,want in sha.items():
+            src=P/name
+            assert hashlib.sha256(src.read_bytes()).hexdigest()==want
+            df=pd.read_feather(src);assert len(df)==expected[name]
+            file=out/(name+'.csv.gz')
+            df.to_csv(file,index=False,compression='gzip',float_format='%.17g')
+            rec={'name':name,'feather_sha256':want,'source_rows':len(df),'columns':list(df.columns),
+                 'gzip_csv_size':file.stat().st_size,'gzip_csv_sha256':hashlib.sha256(file.read_bytes()).hexdigest()}
+            receipt['files'].append(rec)
+            print('E498_CLOUD_EXPORT',rec,flush=True)
+          (out/'E498_original_to_csv_gzip_receipt.json').write_text(json.dumps(receipt,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 901-E498-four-originals-row-preserved-as-CSV-gzip
+          path: E498_flat_export/
+          retention-days: 21
+          if-no-files-found: error
