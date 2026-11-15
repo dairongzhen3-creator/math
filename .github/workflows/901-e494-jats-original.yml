@@ -1,0 +1,47 @@
+name: "901 E494 2018 calibrated sibling division original paper JATS"
+on:
+  push:
+    branches: [cloud-901-e494-sibling-size-calibration-20261115]
+    paths: [".github/workflows/901-e494-jats-original.yml"]
+permissions:
+  contents: read
+jobs:
+  primary-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download primary 2018 full original XML and audit published statements
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,pathlib,hashlib,json,time,xml.etree.ElementTree as ET
+          p=pathlib.Path('e494_2018_paper_original');p.mkdir(exist_ok=True)
+          u='https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5768764/fullTextXML'
+          s=requests.Session();s.headers['User-Agent']='901-E494-published-2018-calibrated-siblings/1.0'
+          receipt={'source':u,'pmcid':'PMC5768764','expected_doi':'10.1038/s41467-017-02505-0','datetime_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+          try:
+            r=s.get(u,timeout=35)
+            b=r.content
+            receipt.update({'http':r.status_code,'size':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+            r.raise_for_status()
+            x=ET.fromstring(b)
+            if x.tag!='article':raise RuntimeError('Wrong root, not JATS article')
+            doi=[el.text for el in x.findall('.//article-id') if el.attrib.get('pub-id-type')=='doi']
+            assert receipt['expected_doi'] in doi, doi
+            receipt['verified_original_jats']=True
+            receipt['title']=' '.join(''.join(x.find('.//article-title').itertext()).split())
+            receipt['found_357_sister_mention']= '357 sibling' in ' '.join(''.join(x.itertext()).split())
+            receipt['contains_0p0361_lambda']='0.0361' in ''.join(x.itertext())
+            receipt['contains_zenodo_concept']='746230' in ''.join(x.itertext())
+            (p/'PMC5768764_2018_fullTextXML.xml').write_bytes(b)
+          except Exception as e:receipt['error']=repr(e)
+          (p/'2018_JATS_source_receipt.json').write_text(json.dumps(receipt,indent=2))
+          print('2018_JATS_RECEIPT',json.dumps(receipt)[:3000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E494-2018-authentic-paper-JATS
+          path: e494_2018_paper_original/
+          retention-days: 21
+          if-no-files-found: error
