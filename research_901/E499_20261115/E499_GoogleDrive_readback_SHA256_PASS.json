@@ -1,0 +1,11 @@
+{
+  "project": 901,
+  "stage": "E499",
+  "original_zip_SHA256": "b3b641df5b438675d1a364fffdb3e12eb3ceb43098e14567ad82d4017a5fcf75",
+  "GoogleDrive_readback_zip_SHA256": "b3b641df5b438675d1a364fffdb3e12eb3ceb43098e14567ad82d4017a5fcf75",
+  "readback_bytes": 2743722,
+  "members": 21,
+  "members_SHA256_PASSED": 20,
+  "ZIP_CRC_PASS": true,
+  "original_Feather_member_source_sha_pass": true
+}
