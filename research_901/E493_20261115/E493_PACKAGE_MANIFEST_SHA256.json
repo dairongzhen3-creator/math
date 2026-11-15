@@ -1,0 +1,82 @@
+{
+  "stage": "E493",
+  "date": "2026-11-15",
+  "artifact_type": "complete research source+analysis+QA",
+  "project": "901",
+  "source_coverage": "Original 2021 iScience Table S2 XLSX and E492 original STAR Protocols JATS; no full TrIPP 18-protein BudJ raw dataset",
+  "sha256_algorithm": "SHA256",
+  "members": [
+    {
+      "name": "PMC7889982_TableS2_SILAC_original_mmc2.xlsx",
+      "size": 842092,
+      "sha256": "2ea57bedff6ccdd71ea982e695eea638cb6a815a1d2c8347b7ae91d8d8c21893"
+    },
+    {
+      "name": "PMC7889982_fullTextXML.xml",
+      "size": 119052,
+      "sha256": "42d58f8db16d91fd09ed02ed3303c109d9bb8b84246c54e4d708bb21dab19903"
+    },
+    {
+      "name": "PMC8165573_fullTextXML.xml",
+      "size": 113247,
+      "sha256": "6a59cfb29e1e933577a40b99de88e5ee4ed7cdf1e6b0355e371d8a08fd9b6667"
+    },
+    {
+      "name": "official_original_source_receipt.json",
+      "size": 1349,
+      "sha256": "f56b22c8cbbeb84b3d19bc276ba77f1226fcb2f0fc735e37accfda706248e4aa"
+    },
+    {
+      "name": "analyze_e493.py",
+      "size": 9658,
+      "sha256": "6827a4f4dc2f1c3546b78c58b6218342492e5e6020bd5a8ad2767e7c7c242223"
+    },
+    {
+      "name": "independent_qa_e493.py",
+      "size": 5119,
+      "sha256": "e05d218d526dadc332e93cee9ebfee263063596ca1697fdeba250052103f5b66"
+    },
+    {
+      "name": "E493_results.json",
+      "size": 4937,
+      "sha256": "20b6a08797d2854ee923053d14900f3ad6d90b65f3cf0ad0e067e618047a3452"
+    },
+    {
+      "name": "E493_independent_QA.json",
+      "size": 1290,
+      "sha256": "de13fd8f51545815646e66e4d8937a208bb6beab88438c312cc5eb98d9dba142"
+    },
+    {
+      "name": "E493_SILAC_source_locked_1338.csv",
+      "size": 357722,
+      "sha256": "026959cbcabe3739b198c4ee44984a390213c65973f23b5516c39d950f54d961"
+    },
+    {
+      "name": "E493_TrIPP_same_frame_optical_double_ratio.csv",
+      "size": 5038,
+      "sha256": "31dc392e4c5a24303f3890e48ec101592d5b05721e765265081114ff51d943cb"
+    },
+    {
+      "name": "E493_source_qualification.csv",
+      "size": 1977,
+      "sha256": "f925ea674f96ee6ff6a921fba29ee2a384f6a986dcdc977babf20ae09a232507"
+    },
+    {
+      "name": "901_E493_正式科研阶段报告_20261115.md",
+      "size": 10245,
+      "sha256": "e6eab86728ea460244b902ed5816b0c1f6ddec643a69f43aab67b86ada2357cf"
+    },
+    {
+      "name": "00_901_E493_最新接续卡_20261115.md",
+      "size": 3077,
+      "sha256": "a78d3420ddae2e618253697cd0b014a0dab4127bd5fbeb0f63660b623f608763"
+    },
+    {
+      "name": "README_REPRODUCE_E493.md",
+      "size": 2112,
+      "sha256": "6a5213e384a73a6460a871f0dc68726e6b6fe3acafa4c4fd3743c3a09d5b0fea"
+    }
+  ],
+  "source_QA_PASS": true,
+  "biology_status": "physical molecule transmission NOT_IDENTIFIED"
+}
