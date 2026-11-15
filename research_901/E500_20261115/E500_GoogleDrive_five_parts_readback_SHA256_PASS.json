@@ -1,0 +1,43 @@
+{
+  "stage": "E500",
+  "readback_chunks": 5,
+  "total_bytes": 49905519,
+  "concat_SHA256_cloud": "43f88ea9986b25a6810712b732fb6ff5435ee9ced55d30d901aa02e1de3f464d",
+  "source_original_full_file_SHA256": "43f88ea9986b25a6810712b732fb6ff5435ee9ced55d30d901aa02e1de3f464d",
+  "all_cloud_chunks_SHA256_pass": true,
+  "full_source_archive_concatenation_equal": true,
+  "cloud_full_50MB_file_readback_pass": true,
+  "members_original_SHA_and_crc_pass": true,
+  "parts": [
+    {
+      "name": "901_E500_照明与不照明_238母细胞再生长原件及独立QA_完整复现包_20261115.zip.part001",
+      "bytes": 10000000,
+      "sha256": "eb6086cd75f927c4425970769c4943883b1758a9ad81f327d4e4102f472a5f4b",
+      "status": "PASS"
+    },
+    {
+      "name": "901_E500_照明与不照明_238母细胞再生长原件及独立QA_完整复现包_20261115.zip.part002",
+      "bytes": 10000000,
+      "sha256": "5e530f9189231f02204fc32a75cb72cbaf51da7eaf9d48c1e1a3c8e874376f6a",
+      "status": "PASS"
+    },
+    {
+      "name": "901_E500_照明与不照明_238母细胞再生长原件及独立QA_完整复现包_20261115.zip.part003",
+      "bytes": 10000000,
+      "sha256": "b9302089ada800a9c5b1e8b1d127fc111a2b0d48066fac80a2f03f6a52f27325",
+      "status": "PASS"
+    },
+    {
+      "name": "901_E500_照明与不照明_238母细胞再生长原件及独立QA_完整复现包_20261115.zip.part004",
+      "bytes": 10000000,
+      "sha256": "c0beace5d381ec435333b51da3520b0153b0945333d5c365e57b5ef050f114d7",
+      "status": "PASS"
+    },
+    {
+      "name": "901_E500_照明与不照明_238母细胞再生长原件及独立QA_完整复现包_20261115.zip.part005",
+      "bytes": 9905519,
+      "sha256": "d5686232a2376f86f8801dbe49e8339674e76b047314316fd2f78a238ed8e17f",
+      "status": "PASS"
+    }
+  ]
+}
