@@ -1,0 +1,95 @@
+name: "901 E500 source mother length regrowth delay original exact 11-frame regression"
+on:
+  push:
+    branches: [cloud-901-e500-illumination-controls-20261115]
+    paths: [".github/workflows/901-e500-regrowth-lag-source.yml"]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  remeasure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: 901-E500-verified-original-illumination-control-and-true-fate
+          run-id: 43731881264
+          github-token: ${{ github.token }}
+          path: original
+      - run: python -m pip install -q pyarrow pandas numpy
+      - name: Author Rmd 11 final-frame regrowth lag on same 238 original mother cohort
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib,hashlib,pandas as pd,numpy as np,math,json,time
+          import pyarrow.feather as feather
+          root=pathlib.Path('e500_regrowth_lag');root.mkdir(exist_ok=True)
+          p=pathlib.Path('original/myframes_control.feather')
+          assert p.stat().st_size==302295912
+          source_hash=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert source_hash=='5cb1850cb127a64bf5e3dffa4d4e13e7cc648f73af176f6d03cf4d0e1fa9bb7c'
+          names=['date','condition','strain','gl_id','cell','c_step','b_rank','end_type','time_start','time_end','m_start','time_sec','length_um']
+          t=feather.read_table(p,columns=names).to_pandas()
+          assert len(t)==1011012
+          x=t[(t.c_step=='GM.2')&(t.time_start<t.m_start)&(t.b_rank==0)].copy()
+          x.sort_values(['condition','cell','time_sec'],inplace=True)
+          assert x.cell.nunique()==238 and len(x)==71755,(len(x),x.cell.nunique())
+          x.to_csv(root/'E500_238_true_mothers_full_GM2_timeseries.csv.gz',index=False,compression='gzip',float_format='%.17g')
+          measured=[]
+          for (condition,cell),g in x.groupby(['condition','cell'],sort=True):
+            g=g.sort_values('time_sec')
+            d={'condition':condition,'cell':str(cell),'date':str(g.date.iloc[0]),
+               'strain':g.strain.iloc[0],'gl_id':str(g.gl_id.iloc[0]),'end_type':str(g.end_type.iloc[0]),
+               'n_raw_frames':len(g),'end_type_survives':g.end_type.iloc[0]=='div','rmd_selection_reason':'UNKNOWN'}
+            if len(g)<=10:
+              d['rmd_selection_reason']='N_LE_10'
+            elif not (g.length_um>0).all():
+              d['rmd_selection_reason']='NONPOSITIVE_LENGTH'
+            else:
+              xx=g.time_sec.iloc[-11:].to_numpy(dtype=float);yy=np.log(g.length_um.iloc[-11:].to_numpy(dtype=float))
+              delta=xx-xx.mean()
+              if np.dot(delta,delta)<=0:
+                d['rmd_selection_reason']='NO_TIME_VARIANCE'
+              else:
+                slope=float(np.dot(delta,yy-yy.mean())/np.dot(delta,delta))
+                intercept=float(yy.mean()-slope*xx.mean())
+                residual=yy-(intercept+slope*xx)
+                denom=float(np.dot(yy-yy.mean(),yy-yy.mean()))
+                r2=float(1-np.dot(residual,residual)/denom) if denom>0 else 0.
+                d.update({'source_last11_log_length_slope_per_sec':slope,'source_last11_log_length_intercept':intercept,
+                          'source_last11_r_squared':r2,'source_initial10_length_um_mean':float(g.length_um.iloc[:10].mean()),
+                          'source_last11_begin_time':int(xx[0]),'source_last11_end_time':int(xx[-1])})
+                if r2<=0.8:d['rmd_selection_reason']='R2_LE_0p8'
+                elif d['end_type'] in ('pruned','touchtop'):d['rmd_selection_reason']='PRUNED_OR_TOUCHTOP'
+                elif d['end_type']!='div':d['rmd_selection_reason']='NO_OBSERVED_DIV'
+                elif slope==0:d['rmd_selection_reason']='ZERO_SLOPE'
+                else:
+                  lag_h=((math.log(d['source_initial10_length_um_mean'])-intercept)/slope-72*3600)/3600
+                  d['source_Rmd_lag_hours']=lag_h
+                  d['rmd_selection_reason']='PASS_TRUE_SURVIVOR'
+            measured.append(d)
+          df=pd.DataFrame(measured)
+          assert len(df)==238 and df.cell.nunique()==238
+          df.to_csv(root/'E500_238_mothers_regrowth_lag_author_11frame_qualified.csv',index=False)
+          passed=df[df.rmd_selection_reason=='PASS_TRUE_SURVIVOR']
+          desc={'original_source_sha256':source_hash,'source_rows':len(t),'true_eligible_mother_rows':len(x),
+                'true_unique_mothers':len(df),'regrowth_lag_selection_counts':df.rmd_selection_reason.value_counts().to_dict(),
+                'regrowth_lag_n_passed':len(passed),
+                'group_lag_stats':{},'method':'Source author final 11 frames log length versus time, R2>0.8, initial 10 length mean; adapted to SAME 238 mother b_rank0 cohort'}
+          for name,g in passed.groupby('condition'):
+            desc['group_lag_stats'][name]={'n':len(g),'median_lag_h':float(g.source_Rmd_lag_hours.median()),
+                                          'mean_lag_h':float(g.source_Rmd_lag_hours.mean()),
+                                          'q25':float(g.source_Rmd_lag_hours.quantile(.25)),
+                                          'q75':float(g.source_Rmd_lag_hours.quantile(.75)),
+                                          'lag_gt_0':int((g.source_Rmd_lag_hours>0).sum())}
+          (root/'E500_mother_regrowth_lag_original_receipt.json').write_text(json.dumps(desc,ensure_ascii=False,indent=2))
+          print('E500_ORIGINAL_MOTHER_LAG',json.dumps(desc,ensure_ascii=False)[:5500],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E500-same-238-mothers-original-trajectory-regrowth-lag
+          path: e500_regrowth_lag/
+          retention-days: 21
+          if-no-files-found: error
