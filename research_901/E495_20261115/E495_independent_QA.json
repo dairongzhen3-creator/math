@@ -1,0 +1,25 @@
+{
+  "stage": "E495",
+  "pass": true,
+  "source_SHA_checked": true,
+  "original_verified_event_count": 42658,
+  "true_dates": 27,
+  "true_lanes": 857,
+  "n_heldout_days_fit_better_than_identity": 27,
+  "n_heldout_days_identity_better_than_baseline": 12,
+  "independent_stdlib_OLS_slope_by_schema": {
+    "single": 0.5136082294433283,
+    "dual": 0.46581314406052576
+  },
+  "independent_global_sse": {
+    "ideal_direct_equality": 59.4261634014182,
+    "frozen_baseline": 57.91870915639057,
+    "frozen_E494_size_regression": 46.036446587876064
+  },
+  "independent_ideal_mse": 0.0013930836748421915,
+  "independent_ideal_vs_baseline_increase": 0.026027069093636834,
+  "recomputed_per_date_slopes_27_all_between_0_and_1": true,
+  "verified_source_range_response_206": true,
+  "independent_original_357_calibration_fit": "NOT_DONE_NO_357_RAW_PAIR_INPUT",
+  "source_scope": "Optical identity proxy validation and compressed range probe, NOT physical molecule transfer or biological replication"
+}
