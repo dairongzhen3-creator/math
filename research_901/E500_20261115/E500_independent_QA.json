@@ -1,0 +1,24 @@
+{
+  "project": 901,
+  "stage": "E500",
+  "QA_PASS": true,
+  "source_Feather_original_sha256_verified": true,
+  "source_export_full_238_keys_verified": true,
+  "n_original_mother_regrowth_IDs": 238,
+  "one_acquisition_date": true,
+  "light_regrow": 85,
+  "light_nonregrow": 100,
+  "light_unknown": 6,
+  "no_light_regrow": 43,
+  "no_light_nonregrow": 4,
+  "source_microscope_position_groups": 24,
+  "four_source_strain_regrowth_gaps_positive": true,
+  "independent_1500_position_block_bootstrap_quantiles_descriptive": [
+    0.3993115318416523,
+    0.4675706214689266,
+    0.539945836154367
+  ],
+  "full_Feather_Arrow_decoder_reused_from_main_cloud_source": "This QA uses first source-extracted 238-row table, original Feather SHA check; not a distinct Arrow parser",
+  "biological_replicates": "one date, positions not randomized in source, cannot infer causal photo-dose",
+  "physical_molecular_bit": "NOT_IDENTIFIED"
+}
