@@ -1,0 +1,67 @@
+name: "901 E492 TrIPP published protocol raw mother daughters and source gate"
+on:
+  push:
+    branches: [cloud-901-e492-tripp-rawgate-20261115]
+    paths: [".github/workflows/901-e492-tripp-source.yml"]
+permissions:
+  contents: read
+jobs:
+  official-protocol-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download original JATS and preserve raw protocol table
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,json,xml.etree.ElementTree as ET,pathlib,io,csv,time,re
+          out=pathlib.Path('e492_tripp_official');out.mkdir(exist_ok=True)
+          s=requests.Session()
+          s.headers.update({'User-Agent':'901-E492-verified-open-access-protocol/1.0'})
+          rec={'stage':'E492','utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'articles':[]}
+          for pmcid in ['PMC8165573','PMC7889982']:
+            url=f'https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML'
+            row={'pmcid':pmcid,'url':url}
+            try:
+              r=s.get(url,timeout=55);b=r.content
+              row.update({'http':r.status_code,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'content_type':r.headers.get('content-type')})
+              if not r.ok or len(b)>10000000 or b[:100].lstrip()[:1]!=b'<':
+                row['source_ok']=False;row['head']=r.text[:300]
+                rec['articles'].append(row);continue
+              root=ET.fromstring(b)
+              if root.tag!='article':raise ValueError('not JATS article root')
+              row['source_ok']=True
+              (out/(pmcid+'_fullTextXML.xml')).write_bytes(b)
+              row['article_title']=' '.join(root.findtext('.//article-title','').split())
+              row['supplementary']=[]
+              for el in root.findall('.//supplementary-material'):
+                href=el.attrib.get('{http://www.w3.org/1999/xlink}href')
+                row['supplementary'].append({'id':el.attrib.get('id'),'href':href,'label':' '.join(''.join(el.itertext()).split())[:180]})
+              row['tables']=[]
+              for tbl in root.findall('.//table-wrap'):
+                label=' '.join(''.join(tbl.find('label').itertext()).split()) if tbl.find('label') is not None else ''
+                caption=' '.join(''.join(tbl.find('caption').itertext()).split())[:900] if tbl.find('caption') is not None else ''
+                data=[]
+                for tr in tbl.findall('.//tr'):
+                  vals=[' '.join(''.join(cell.itertext()).split()) for cell in tr if cell.tag in ('td','th')]
+                  if vals:data.append(vals)
+                item={'id':tbl.attrib.get('id'),'label':label,'caption':caption,'rows':len(data),'sample_rows':data[:8]}
+                row['tables'].append(item)
+                if data:
+                  fname=f'{pmcid}_table_{tbl.attrib.get("id","na")}.csv'
+                  with (out/fname).open('w',newline='',encoding='utf8') as f:csv.writer(f).writerows(data)
+                  item['saved_as']=fname
+              row['figs']=len(root.findall('.//fig'))
+            except Exception as e:row['error']=repr(e)[:600]
+            rec['articles'].append(row)
+            print('E492_PROTOCOL',json.dumps(row,ensure_ascii=False)[:7000],flush=True)
+          (out/'source_receipt.json').write_text(json.dumps(rec,ensure_ascii=False,indent=2),encoding='utf8')
+          PY
+      - name: Keep source originals and exact table
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E492-TrIPP-2021-protocol-raw-table-and-source-audit
+          path: e492_tripp_official/
+          retention-days: 21
+          if-no-files-found: error
