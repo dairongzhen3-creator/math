@@ -1,0 +1,106 @@
+name: "901 E498 Gervais 2026 degradation original measured rows and protocol audit"
+on:
+  push:
+    branches: [cloud-901-e498-starvation-degradation-20261115]
+    paths: [".github/workflows/901-e498-original-degradation.yml"]
+permissions:
+  contents: read
+jobs:
+  authentic-source-intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Install Python Arrow reader for exact original Feather source
+        run: python -m pip install --quiet "pyarrow>=18" "pandas>=2" "numpy>=1.26"
+      - name: Verify ZIP central directory, retrieve only 4 selected original members, CRC and inventory
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,struct,json,zlib,pathlib,time
+          import pyarrow.feather as feather
+          import pandas as pd
+          root=pathlib.Path('E498_official_originals');root.mkdir(exist_ok=True)
+          url='https://zenodo.org/api/records/18059846/files/Gervais2026_data.zip/content'
+          nzip=842127932;tail_len=2*1024*1024
+          session=requests.Session();session.headers.update({'User-Agent':'901-E498-verified-2026-protein-persistence-original-data/1.0'})
+          def read_range(a,b,max_bytes):
+            r=session.get(url,headers={'Range':f'bytes={a}-{b}'},timeout=(20,95),stream=True)
+            if r.status_code!=206 or r.headers.get('Content-Range')!=f'bytes {a}-{b}/{nzip}':
+              raise RuntimeError(f'Unexpected HTTP range response {r.status_code}, {r.headers.get("Content-Range")}')
+            buf=bytearray()
+            for chunk in r.iter_content(262144):
+              if chunk:buf.extend(chunk)
+              if len(buf)>max_bytes:raise RuntimeError('compressed bandwidth cap violation')
+            if len(buf)!=b-a+1:raise RuntimeError('short-read')
+            return bytes(buf)
+          tail=read_range(nzip-tail_len,nzip-1,tail_len)
+          idx=tail.rfind(b'PK\x05\x06');assert idx>=0
+          eo=struct.unpack_from('<4s4H2IH',tail,idx)
+          central_n=eo[4];central_start=eo[6];assert central_n==21 and central_start>=nzip-tail_len
+          p=central_start-(nzip-tail_len);entries={}
+          for i in range(central_n):
+            v=struct.unpack_from('<4s6H3I5H2I',tail,p);assert v[0]==b'PK\x01\x02'
+            n,extra,comment=v[10],v[11],v[12]
+            name=tail[p+46:p+46+n].decode('utf-8')
+            entries[name]={'crc32':v[7],'compression':v[4],'compressed_bytes':v[8],
+                           'uncompressed_bytes':v[9],'header_offset':v[16]}
+            p+=46+n+extra+comment
+          wanted=['mydegrates.feather','myframes_degradation.feather','myframes_bleaching.feather','myproteomicsdata_multistrain.feather']
+          receipt={'stage':'901_E498','publication':'Gervais et al 2026 Mol Syst Biol DOI 10.1038/s44320-026-00226-5',
+                   'dataset_zenodo_version':18059846,'original_842MB_archive_downloaded':False,'official_archive_md5_from_zenodo':'207baa767ed43b767f2c97d322866e2d',
+                   'original_archive_members':len(entries),'date_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+                   'verified_member_receipts':[]}
+          inventory=[]
+          for name in wanted:
+            path='Gervais2026_data/Exported_data/'+name;v=entries[path]
+            h=read_range(v['header_offset'],v['header_offset']+511,512)
+            local=struct.unpack_from('<4s5H3I2H',h,0)
+            assert local[0]==b'PK\x03\x04' and h[30:30+local[-2]].decode('utf8')==path
+            start=v['header_offset']+30+local[-2]+local[-1]
+            assert 0<v['compressed_bytes']<24_000_000 and v['compression']==8
+            blob=read_range(start,start+v['compressed_bytes']-1,v['compressed_bytes'])
+            original=zlib.decompress(blob,-15)
+            assert len(original)==v['uncompressed_bytes'] and zlib.crc32(original)==v['crc32']
+            (root/name).write_bytes(original)
+            verify={'name':path,'uncompressed_bytes':len(original),'zip_compressed_bytes':len(blob),
+                    'source_member_crc32':format(v['crc32'],'08x'),'source_member_sha256':hashlib.sha256(original).hexdigest(),
+                    'original_zip_member_CRC_pass':True}
+            receipt['verified_member_receipts'].append(verify)
+            table=feather.read_table(str(root/name))
+            df=table.to_pandas()
+            descr={'source_filename':name,'rows':len(df),'columns':list(df.columns),
+                   'types':{c:str(df[c].dtype) for c in df.columns},'source_sha256':verify['source_member_sha256'],
+                   'head3':df.head(3).astype(str).to_dict('records'),
+                   'null_counts':{c:int(df[c].isna().sum()) for c in df.columns}}
+            for c in ['Fluo1','Fluo','Fluo_sig','strain','date','idx','exp_series','condition','c_step','sample','GFP_prom','time_h']:
+              if c in df:
+                u=df[c].dropna().unique()
+                descr[c+'_distinct_n']=len(u)
+                descr[c+'_counts_head']=df[c].value_counts(dropna=False).head(20).to_dict() if c in ['Fluo1','Fluo','Fluo_sig','idx','exp_series','c_step','condition','GFP_prom','time_h'] else None
+                descr[c+'_values_sample']=[str(z) for z in u[:35]]
+            for c in ['time_sec','time_h','m_start','signal','Ampl','gamma_init','gamma_dec_Fluo','Log_Quantity_norm']:
+              if c in df and pd.api.types.is_numeric_dtype(df[c]):
+                descr[c+'_range']=[float(df[c].min()),float(df[c].median()),float(df[c].max())]
+            # Small context-level QC; preserve original experiments without treating cell rows as independent replicates
+            groupcols=[x for x in ['date','strain','Fluo','Fluo_sig','idx','c_step','exp_series','GFP_prom','time_h'] if x in df]
+            groupcols=groupcols[:6]
+            if groupcols:
+              grouped=df.groupby(groupcols,dropna=False).size().reset_index(name='rows')
+              descr['groupby_columns']=groupcols;descr['groupby_groups_n']=len(grouped)
+              grouped.to_csv(root/f'{name}.group_index.csv',index=False)
+            if name=='mydegrates.feather':
+              df.to_csv(root/'E498_author_original_degradation_parameters.csv',index=False)
+            inventory.append(descr)
+            print('E498_VERIFIED',name,verify,'rows',len(df),'cols',list(df.columns),flush=True)
+            del table,df
+          (root/'E498_original_source_receipts.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False))
+          (root/'E498_original_tables_inventory.json').write_text(json.dumps(inventory,indent=2,ensure_ascii=False,default=str))
+          PY
+      - name: Preserve exact original Feather bytes, grouped source index and independent original CRC receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E498-four-verified-original-Gervais-Feather-and-inventory
+          path: E498_official_originals/
+          retention-days: 21
+          if-no-files-found: error
