@@ -1,0 +1,108 @@
+{
+  "stage": "E494",
+  "source_inputs_sha256": {
+    "E488_same_event_size_and_background.csv": "7e4dadde0b754c78e21fa22ab03f9fdcca911a608cecefe7ab7b23ce0a527072",
+    "E488_cv_predictions.csv": "b06ada09bbeb9b536305d165b08550d62c67a9a39fc7360d0409be2d4438c8a1"
+  },
+  "source": {
+    "n_events": 42658,
+    "n_dates": 27,
+    "n_lanes": 857,
+    "schema_counts": {
+      "dual": 26773,
+      "single": 15885
+    }
+  },
+  "measured_variables": "fluorescence amplitude, estimated pixel length at first daughter frame; no absolute molecule count, no volume",
+  "n_non_tied_daughter_lengths": 35718,
+  "n_exact_tie_daughter_lengths": 6940,
+  "split_pearson_r": 0.4539852492443222,
+  "split_pearson_r_squared": 0.20610260653142937,
+  "split_size_sign_fluorescence_sign_agreement_non_tie": 0.6743658659499412,
+  "split_size_sign_fluorescence_sign_agreement_n": 24087,
+  "mean_abs_fluorescence_minus_length_split": 0.026640910656428905,
+  "median_abs_fluorescence_minus_length_split": 0.020735419303394537,
+  "mean_signed_fluorescence_minus_length_split": -0.0026989381063198467,
+  "by_schema": {
+    "dual": {
+      "n": 26773,
+      "Pearson_r_size_fluo_split": 0.41900320753254,
+      "n_non_tied_lengths": 22338,
+      "n_size_fluo_sign_agree": 14979,
+      "fraction_size_fluo_sign_agree": 0.6705613752350256,
+      "mean_signed_optical_minus_length": -0.002385111817538563,
+      "median_abs_optical_minus_length": 0.020450866179007376
+    },
+    "single": {
+      "n": 15885,
+      "Pearson_r_size_fluo_split": 0.5032930270576317,
+      "n_non_tied_lengths": 13380,
+      "n_size_fluo_sign_agree": 9108,
+      "fraction_size_fluo_sign_agree": 0.6807174887892377,
+      "mean_signed_optical_minus_length": -0.0032278692507668916,
+      "median_abs_optical_minus_length": 0.021174381345485105
+    }
+  },
+  "daughter_length_category_counts_and_top_bright_fraction": {
+    "BOTTOM_LARGER": {
+      "events": 17525,
+      "n_top_brighter": 4832,
+      "fraction_top_brighter": 0.2757203994293866
+    },
+    "LENGTH_EQUAL": {
+      "events": 6940,
+      "n_top_brighter": 3059,
+      "fraction_top_brighter": 0.44077809798270895
+    },
+    "TOP_LARGER": {
+      "events": 18193,
+      "n_top_brighter": 11394,
+      "fraction_top_brighter": 0.6262848348265817
+    }
+  },
+  "exclude_author_special_gain_dates_20190605_20190614": {
+    "n_events": 40628,
+    "n_dates": 25,
+    "n_lanes": 794,
+    "pearson_r": 0.4685072524150733
+  },
+  "out_of_date_linear_prediction": {
+    "source_days": 27,
+    "positive_days": 27,
+    "pooled_mse_baseline": 0.0013577455379152933,
+    "pooled_mse_size": 0.0010791984290842523,
+    "pooled_relative_mse_reduction": 0.2051541331218273,
+    "min_max_day_reduction": [
+      0.02581182851436048,
+      0.368182213092218
+    ]
+  },
+  "out_of_date_optical_logscore": {
+    "bits_gain_per_event": 0.07648491646664253,
+    "n_events": 42658,
+    "positive_days": 26,
+    "n_days": 27,
+    "binomial_Laplace1": "train remaining dates and heldout source date; category based on top vs bottom pixel length incl ties, schema stratification"
+  },
+  "within_lane_conditioned": {
+    "r": 0.45667620057941555,
+    "n_permutations": 199,
+    "permutation_min": -0.012711313197759382,
+    "permutation_median": -8.27673051917361e-05,
+    "permutation_max": 0.015677964765033595,
+    "finite_randomization_reference_upper_tail": 0.005,
+    "null": "shuffle fluorescence daughter split *within same lane* while preserving within-lane source distributions"
+  },
+  "date_block_resampling_1000_descriptive_r_quantiles": [
+    0.4050156235768559,
+    0.45467645009351676,
+    0.48963871786871743
+  ],
+  "by_date_correlation_all_positive": true,
+  "experimental_confound": "Common cell size, optical background, probe conditions and strain/lineage clustering. The processed fluorescence may include size-proportional autofluorescence; no causal partition or molecule count claim.",
+  "special_2019_exposure_dates": "sensitivity source exists in E488; cross-source 2018 lambda unverified for this instrument/experimental context",
+  "physical_molecule_transfer_bit": "NOT_IDENTIFIED",
+  "bit_per_second": "NOT_IDENTIFIED",
+  "bit_per_joule": "NOT_IDENTIFIED",
+  "publication": "PUBLICATION_NO_GO"
+}
