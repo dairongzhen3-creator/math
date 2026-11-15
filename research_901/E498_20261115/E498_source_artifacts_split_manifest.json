@@ -1,0 +1,56 @@
+{
+  "stage": "E498",
+  "date": "2026-11-15",
+  "provider": "Gervais2026 Zenodo record 18059846, exact 4 Feather members separately CRC/SHA verified; GitHub original workspaces",
+  "files_verified": 4,
+  "full_842MB_archive_was_downloaded": false,
+  "source_artifacts": null,
+  "artifacts": [
+    {
+      "name": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip",
+      "full_bytes": 33347672,
+      "full_sha256": "7f9978cec027177d30277d7c50e87861d1cd8fcefc5cc1548f63cd433376df34",
+      "zip_members_n": 10,
+      "parts": [
+        {
+          "filename": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part001",
+          "bytes": 10000000,
+          "sha256": "cce5760b41924b64e2c9087224e4fd32896cc7038c51799006566210dd963b48"
+        },
+        {
+          "filename": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part002",
+          "bytes": 10000000,
+          "sha256": "2a1a1ed5943245b9f7d014d8f27050005c2e307ccbb8b31d22ac546406ac8b4c"
+        },
+        {
+          "filename": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part003",
+          "bytes": 10000000,
+          "sha256": "5ec22383108e400c8ac87202a18b1ef26416c5ddede46a160f91153dcaef4bee"
+        },
+        {
+          "filename": "E498_2026_four_exact_original_Feather_GitHub_artifact.zip.part004",
+          "bytes": 3347672,
+          "sha256": "e29678fe22930caf4a46a3e909a4d728c16e6cbbc451713c04eabfa4993119f9"
+        }
+      ]
+    },
+    {
+      "name": "E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip",
+      "full_bytes": 16332774,
+      "full_sha256": "04a3140ec724399c483674425f9ac727e7c25b00cc919cf184d3c6a1ac2deb6d",
+      "zip_members_n": 5,
+      "parts": [
+        {
+          "filename": "E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip.part001",
+          "bytes": 10000000,
+          "sha256": "5477d43116709a328bce0dde6ea90295cdab6ebad7c3a20b69fe5b962fa9c894"
+        },
+        {
+          "filename": "E498_2026_four_row_preserving_CSVgz_GitHub_artifact.zip.part002",
+          "bytes": 6332774,
+          "sha256": "890fa565abe1497d73d0e3838d8ace4c0a74bf618d941ee340fb475aca7c9c57"
+        }
+      ]
+    }
+  ]
+}
