@@ -1,0 +1,65 @@
+name: "901 E500 official BioImage Archive microscopy file-list provenance"
+on:
+  push:
+    branches: [cloud-901-e500-illumination-controls-20261115]
+    paths: [".github/workflows/901-e500-bia-file-manifests.yml"]
+permissions:
+  contents: read
+jobs:
+  files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download exact registered BioStudies acquisition list JSON with a strict 5MB each cap
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,pathlib,hashlib,json,time
+          root=pathlib.Path('e500_bia_manifests');root.mkdir(exist_ok=True)
+          paths=['Statphase_Transition_GLs/legacyMoMA.json','Statphase_Transition_GLs/deepMoMA.json']
+          bases=[
+          'https://www.ebi.ac.uk/biostudies/files/S-BIAD2506/',
+          'https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/506/S-BIAD2506/Files/',
+          'https://www.ebi.ac.uk/biostudies/fire/S-BIAD/506/S-BIAD2506/Files/'
+          ]
+          session=requests.Session();session.headers['User-Agent']='901-E500-Original-2026-BIA-image-manifests/1.0'
+          receipts=[]
+          for name in paths:
+            record={'manifest':name,'attempts':[],'retrieved':False}
+            for b in bases:
+              url=b+name
+              a={'url':url}
+              try:
+                r=session.get(url,stream=True,timeout=(15,35))
+                data=bytearray()
+                for chunk in r.iter_content(131072):
+                  if chunk:data.extend(chunk)
+                  if len(data)>5_000_000:raise ValueError('5MB source metadata cap')
+                payload=bytes(data)
+                a.update({'status':r.status_code,'size':len(payload),'ctype':r.headers.get('content-type'),'head':payload[:60].decode('utf8','replace')})
+                if r.ok and payload.lstrip()[:1] in (b'{',b'['):
+                  j=json.loads(payload)
+                  record['retrieved']=True
+                  record['source_url']=url
+                  record['raw_sha256']=hashlib.sha256(payload).hexdigest()
+                  record['root_type']=type(j).__name__
+                  record['n_items']=len(j)
+                  record['json_keys']=list(j.keys()) if isinstance(j,dict) else None
+                  alltext=payload.decode('utf8')
+                  for term in ['20221220','NO_LIGHT','no_light','bleaching','myframes_control']:
+                    record['contains_'+term]=term in alltext
+                  (root/pathlib.PurePosixPath(name).name).write_bytes(payload)
+                  record['attempts'].append(a);break
+              except Exception as e:a['error']=repr(e)[:250]
+              record['attempts'].append(a)
+            receipts.append(record)
+            print('BIA_FILES',json.dumps({k:v for k,v in record.items() if k!='attempts'},ensure_ascii=False),flush=True)
+          (root/'E500_official_bia_manifests_receipt.json').write_text(json.dumps({'accession':'S-BIAD2506','date':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'records':receipts},indent=2,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E500-BIA-published-image-manifests
+          path: e500_bia_manifests/
+          retention-days: 21
+          if-no-files-found: error
