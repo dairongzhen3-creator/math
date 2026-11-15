@@ -1,0 +1,49 @@
+{
+  "stage": "E493",
+  "source_independent": true,
+  "source_SILAC": "Original exact PMC official mmc2.xlsx byte SHA and MD5; directly re-parsed ZIP+XML without artifact_tool",
+  "source_TrIPP": "Source JATS Table1 directly re-read using Decimal48",
+  "protein_entries": 1338,
+  "CBF1_positive": 1337,
+  "HHO1_positive": 1336,
+  "paired_positive": 1335,
+  "nonpositive_fitted_ids": [
+    [
+      "DBP8",
+      -0.00207030108977373,
+      0.00863457008585818
+    ],
+    [
+      "LRP1",
+      0.00256079694905897,
+      -0.000157454483676514
+    ],
+    [
+      "GYP5",
+      0.00546526341892867,
+      -0.00135701946880684
+    ]
+  ],
+  "median_CBF1_min": 86.5067343892557,
+  "median_HHO1_min": 60.9409440493205,
+  "sciPy_spearman": 0.31801614162978387,
+  "optical_source_crosscheck": {
+    "daughter1_before_daughter2": {
+      "n": 16,
+      "median": 0.050540188620459184,
+      "count_positive": 12
+    },
+    "daughter1_after_daughter2": {
+      "n": 34,
+      "median": 0.2895194059051623,
+      "count_positive": 32
+    },
+    "daughter2_after_birth": {
+      "n": 34,
+      "median": 0.3067959983419243,
+      "count_positive": 31
+    }
+  },
+  "scientific_scope": "source numerical verification, NOT a biological replicate, NOT per-cell molecule count calibration",
+  "QA_PASS": true
+}
