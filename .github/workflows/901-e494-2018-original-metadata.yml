@@ -1,0 +1,86 @@
+name: "901 E494 2018 357 sister pairs original Zenodo discovery"
+on:
+  push:
+    branches: [cloud-901-e494-sibling-size-calibration-20261115]
+    paths: [".github/workflows/901-e494-2018-original-metadata.yml"]
+permissions:
+  contents: read
+jobs:
+  official-source-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve published Zenodo 746230 original and 2015 protein allocation repository
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,pathlib,json,hashlib,time,urllib.parse,zipfile,io
+          P=pathlib.Path('e494_source_verification');P.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E494-public-2018-bacterial-sibling-data-audit/1.0'
+          urls=[
+            'https://zenodo.org/api/records/746230',
+            'https://zenodo.org/records/746230',
+            'https://zenodo.org/record/746230',
+            'https://api.datacite.org/dois/10.5281/zenodo.746230'
+          ]
+          out={'stage':'E494','source_2018_doi':'10.1038/s41467-017-02505-0','published_zenodo_doi':'10.5281/zenodo.746230','requests':[],'zenodo_file_inventory':[],'downloaded_qualified_small_files':[],'date_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+          for u in urls:
+            d={'url':u}
+            try:
+              r=s.get(u,timeout=20,allow_redirects=True)
+              d.update({'http':r.status_code,'size':len(r.content),'content_type':r.headers.get('content-type'),'final_url':r.url,'sha256':hashlib.sha256(r.content).hexdigest(),'body_preview':r.text[:240]})
+              if r.ok and 'json' in r.headers.get('content-type',''):
+                x=r.json()
+                if 'zenodo.org/api/records' in u:
+                  fs=x.get('files',[])
+                  out['zenodo_file_inventory']=[{'name':f.get('key'),'size':f.get('size'),'checksum':f.get('checksum'),
+                                             'links':{k:v for k,v in f.get('links',{}).items() if k in ('self','content')}}
+                                             for f in fs]
+                  d['title']=x.get('metadata',{}).get('title');d['files_n']=len(fs)
+                  for item in fs:
+                    name=item.get('key','')
+                    size=item.get('size',0)
+                    if 0<size<2000000 and (name.lower().endswith(('.txt','.csv','.tsv','.md','.json','.xlsx','.zip')) or 'readme' in name.lower()):
+                      link=item.get('links',{}).get('self') or item.get('links',{}).get('content')
+                      if not link:continue
+                      try:
+                        raw=s.get(link,timeout=25).content
+                        if len(raw)!=size:continue
+                        check=item.get('checksum','')
+                        ok=(not check or check.rsplit(':',1)[-1] == hashlib.md5(raw).hexdigest() if check.startswith('md5:') else not check)
+                        dest=P/('zenodo_746230_'+pathlib.PurePath(name).name);dest.write_bytes(raw)
+                        out['downloaded_qualified_small_files'].append({'name':name,'size':size,'sha256':hashlib.sha256(raw).hexdigest(),'md5':hashlib.md5(raw).hexdigest(),'checksum_verified':ok,'downloaded':True})
+                      except Exception as e:out['downloaded_qualified_small_files'].append({'name':name,'error':str(e)[:200]})
+                if 'datacite' in u:
+                  attrs=x.get('data',{}).get('attributes',{})
+                  d['doi']=attrs.get('doi');d['url']=attrs.get('url');d['isActive']=attrs.get('state');d['title']=attrs.get('titles',[{}])[0].get('title')
+            except Exception as e:d['error']=type(e).__name__+':'+str(e)[:250]
+            out['requests'].append(d)
+            print('E494_SOURCE',json.dumps({k:v for k,v in d.items() if k!='body_preview'},ensure_ascii=False)[:1200],flush=True)
+          # Alternative published 2015 Kuwada microscopy source: original scientific JATS and links.
+          u='https://www.ebi.ac.uk/europepmc/webservices/rest/PMC4309519/fullTextXML'
+          d={'url':u}
+          try:
+            r=s.get(u,timeout=30);b=r.content
+            d.update({'http':r.status_code,'size':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+            if r.ok and b.lstrip().startswith(b'<?xml') or (r.ok and b.lstrip().startswith(b'<article')):
+              from xml.etree import ElementTree as ET
+              root=ET.fromstring(b)
+              d['article_title']=''.join(root.find('.//article-title').itertext()) if root.find('.//article-title') is not None else ''
+              d['supplements']=[]
+              for e in root.findall('.//supplementary-material'):
+                d['supplements'].append({'href':e.attrib.get('{http://www.w3.org/1999/xlink}href'),'text':' '.join(''.join(e.itertext()).split())[:250]})
+              (P/'PMC4309519_localizome_fullTextXML.xml').write_bytes(b)
+          except Exception as e:d['error']=str(e)[:300]
+          out['localizome_2015_jats']=d
+          (P/'E494_2018_and_2015_public_source_receipt.json').write_text(json.dumps(out,indent=2,ensure_ascii=False))
+          print('E494_TOTAL',len(out['zenodo_file_inventory']),len(out['downloaded_qualified_small_files']),len(d.get('supplements',[])),flush=True)
+          PY
+      - name: Retain source discovery and any verified small official originals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E494-official-2018-sibling-data-and-2015-localizome-source
+          path: e494_source_verification/
+          if-no-files-found: error
+          retention-days: 21
