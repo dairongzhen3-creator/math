@@ -1,0 +1,75 @@
+name: "901 E489 published FLCS LFS originals source QC"
+on:
+  push:
+    branches: [cloud-901-e489-flcs-source-20261115]
+    paths: [".github/workflows/901-e489-flcs-originals.yml"]
+permissions:
+  contents: read
+jobs:
+  flcs-originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve only original author files and independently verify Git LFS SHA
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,zipfile,io,pathlib,time,json,sys,csv
+          files={
+           'FLCS_lacInduction.xlsx':('97f93074b72214bd8a20439ff508f6d8d47111ac115b6be6c06538457731212d',33583),
+           'FLCS_lags.xlsx':('c927315fd7ce755e3f493a5d3ec152c3ed61a1ffbf09f722391523bcf559c7cf',12317),
+           '20200128_lac1_shortLags.csv':('22045b67b1ca716f63b9ee2c3d8c15c93e9be79a7d89b998d8e24f3aaed3ba81',6695),
+           '20200128_lac1_longLags.csv':('31dc653f2728282cdee283c28773a5bc2139ce6abbb11c6a7d6c87a8be10538f',20824),
+           'decay_curves/decay_GFP.dat':('f8609c0e80896b5a0f40d9e2a44cee682bbaa1f28c27820fee31bfd0695ddd58',284986),
+           'decay_curves/decay_noGFP.dat':('15dca319923c5388c00836097b234bf7dff47ada0f8bd87b44d3938975c6112a',326968),
+           'decay_curves/time_series_lactose_phase.dat':('d247ad1e8205571d22c4ad86ff0f8d583fafa858f81530da70b217803c38842f',5798833)
+          }
+          root=pathlib.Path('e489_flcs');root.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E489-GitLFS-source-auth/1.0'
+          report={'stage':'E489','source':'Julou/MoM_lacInduction tag plos','source_tag_tree':'976f62f31433d315ae2337a72d99f6deba4165ee',
+                  'utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'files':[]}
+          for name,(expectsha,expected_size) in files.items():
+            src='data_FLIM/'+name
+            variants=[
+             'https://media.githubusercontent.com/media/julou/MoM_lacInduction/plos/'+src,
+             'https://github.com/julou/MoM_lacInduction/raw/refs/tags/plos/'+src,
+            ]
+            rec={'path':src,'lfs_sha256_expected':expectsha,'size_expected':expected_size,'attempts':[]}
+            for url in variants:
+              attempt={'url':url}
+              try:
+                r=s.get(url,timeout=95,allow_redirects=True);b=r.content
+                attempt.update({'http':r.status_code,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'content_type':r.headers.get('Content-Type'),'final_host':r.url.split('/')[2]})
+                passed=r.status_code==200 and len(b)==expected_size and attempt['sha256']==expectsha
+                if passed and name.endswith('.xlsx'):
+                  with zipfile.ZipFile(io.BytesIO(b)) as z:
+                    passed='[Content_Types].xml' in z.namelist() and z.testzip() is None
+                    attempt['xlsx_crc_pass']=passed
+                if passed and name.endswith('.csv'):
+                  try:
+                    sample=b.decode('utf-8-sig')
+                    attempt['csv_rows']=len(sample.splitlines())-1
+                    attempt['csv_fields']=next(csv.reader(sample.splitlines()))
+                  except Exception as e:passed=False;attempt['csv_error']=str(e)
+                if passed:
+                  dest=root/name;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(b)
+                  rec['verified']=True;rec['source_url']=url
+                  rec['sha256']=attempt['sha256'];rec['bytes']=len(b)
+                  rec['attempts'].append(attempt);break
+              except Exception as e:attempt['error']=repr(e)[:300]
+              rec['attempts'].append(attempt)
+            report['files'].append(rec)
+            print('E489_FLCS',json.dumps(rec,ensure_ascii=False)[:900],flush=True)
+          report['verified_count']=sum(bool(x.get('verified')) for x in report['files'])
+          (root/'source_audit.json').write_text(json.dumps(report,indent=2,ensure_ascii=False))
+          print('E489_STATUS',report['verified_count'],'/',len(files),flush=True)
+          # Preserve negative/failures but do not present missing files as acquired.
+          PY
+      - name: Preserve original data and source receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E489-FLCS-originals-verified-or-failures
+          path: e489_flcs/
+          retention-days: 21
+          if-no-files-found: error
