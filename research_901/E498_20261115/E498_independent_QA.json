@@ -1,0 +1,43 @@
+{
+  "project": 901,
+  "stage": "E498",
+  "PASS": true,
+  "source_original_4_Feather_SHA256_pass": true,
+  "source_export_4_gzip_SHA256_pass": true,
+  "source_degradation_rows": 1116240,
+  "source_unique_cell_time": 279060,
+  "source_spectral_rows_reporter_matched": 279060,
+  "source_starvation_rows": 122974,
+  "source_positive_post1h_starvation_rows": 3992,
+  "valid_2to7h_degradation_intervals": 3517,
+  "source_unique_cells_in_intervals": 439,
+  "paired_early_late_within_cell": 403,
+  "paired_early_greater": 368,
+  "source_bleaching_rows": 91838,
+  "independent_WLS_cells_n_gt5": 1659,
+  "positive_WLS_bleaching_cells": 1446,
+  "source_proteomics_rows": 130200,
+  "source_proteomics_genes": 2604,
+  "source_proteomics_backgrounds": 10,
+  "source_proteomics_missing_logs": 16543,
+  "source_proteomics_per_time_cross_background_span": {
+    "1.4": {
+      "count5": 2301,
+      "count10": 1926,
+      "median_span": 0.9796223628847575
+    },
+    "21.4": {
+      "count5": 2197,
+      "count10": 1868,
+      "median_span": 0.9322032478664699
+    },
+    "45.4": {
+      "count5": 2190,
+      "count10": 1898,
+      "median_span": 0.9859305127897879
+    }
+  },
+  "author_gamma_survival_model_decimal48_check": "PASS",
+  "source_note": "Numerical source audit using independently implemented stdlib streaming from verified original exported rows, not independent wet lab or protein count calibration",
+  "physical_molecular_MI": "NOT_IDENTIFIED"
+}
