@@ -1,0 +1,33 @@
+{
+  "project": 901,
+  "stage": "E497",
+  "passed": true,
+  "author_zip_source_SHA256_verified": true,
+  "original_csv_rows_reparsed": 682679,
+  "unique_raw_source_cell_frame_keys_exactly_matched": 30174,
+  "experiment_csv_files": 31,
+  "all_31_file_parameter_headings_confirmed": true,
+  "source_NPZ_numeric_parameters_scalar_byte_reparsed": 341,
+  "NPZ_object_array_unpickled": false,
+  "source_events_verified": 10058,
+  "independent_raw_vs_posterior_label_flips": 923,
+  "independent_raw_vs_posterior_pearson": 0.9469015704331247,
+  "source_posterior_vs_raw_median_abs_split_difference": 0.005023483084517527,
+  "median_source_var_g": 13.113,
+  "independent_LODO_both_targets": {
+    "lodo_raw": {
+      "source_date_groups": 10,
+      "positive_folds": 10,
+      "mse_base": 0.001025219968573417,
+      "mse_size": 0.0006464625846734851
+    },
+    "lodo_model_target": {
+      "source_date_groups": 10,
+      "positive_folds": 9,
+      "mse_base": 0.0009418535871383367,
+      "mse_size": 0.0005673667631348275
+    }
+  },
+  "source_code_semantics": "Source var_g in RealTrace likelihood, cov_gg model posterior conditional on same source; not independent noise calibration",
+  "source_inference": "NO_CALIBRATED_MOLECULAR_TRANSFER_BITS"
+}
