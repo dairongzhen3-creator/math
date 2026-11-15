@@ -1,0 +1,64 @@
+name: "901 E496 2026 new source 842MB ZIP remote central directory only"
+on:
+  push:
+    branches: [cloud-901-e496-open-source-calibration-20261115]
+    paths: [".github/workflows/901-e496-zenodo-zip-index.yml"]
+permissions:
+  contents: read
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: HTTP range only last 4MiB and list ZIP members without 842MB download
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,struct,re,json,pathlib,time,hashlib,urllib.parse
+          out=pathlib.Path('e496_2026_remote_zip_index');out.mkdir(exist_ok=True)
+          src='https://zenodo.org/api/records/18059846/files/Gervais2026_data.zip/content'
+          size=842127932;cap=4*1024*1024
+          rep={'stage':'E496','record':18059846,'published_source_md5':'207baa767ed43b767f2c97d322866e2d',
+             'official_zip_full_bytes':size,'utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+             'streaming_cap_bytes':cap,'full_original_not_downloaded':True}
+          s=requests.Session();s.headers['User-Agent']='901-E496-2026-zip-remote-central-directory-source-qualification/1.0'
+          try:
+            r=s.get(src,headers={'Range':f'bytes={size-cap}-{size-1}'},stream=True,timeout=(25,55),allow_redirects=True)
+            rep['http_status']=r.status_code;rep['content_range']=r.headers.get('Content-Range')
+            if r.status_code!=206 or rep['content_range']!=f'bytes {size-cap}-{size-1}/{size}':
+              rep['outcome']='STRICT_RANGE_NOT_CONFIRMED';rep['server_content_type']=r.headers.get('content-type')
+            else:
+              buf=bytearray()
+              for part in r.iter_content(131072):
+                if part:buf.extend(part)
+                if len(buf)>cap:raise RuntimeError('Exceeded exact cap')
+              z=bytes(buf);rep['received_bytes']=len(z)
+              assert len(z)==cap
+              tail_end=z.rfind(b'PK\x05\x06')
+              assert tail_end>=0
+              e=struct.unpack_from('<4s4H2IH',z,tail_end)
+              expected_entries=e[4];central_size=e[5];central_offset=e[6]
+              rep.update({'central_n_entries':expected_entries,'central_directory_bytes':central_size,'central_directory_start':central_offset,'tail_byte_start':size-cap})
+              if central_offset<size-cap:raise RuntimeError('Central directory starts before downloaded bounded tail')
+              p=central_offset-(size-cap);files=[]
+              for i in range(expected_entries):
+                assert z[p:p+4]==b'PK\x01\x02',('CD_SIGNATURE',i,p,z[p:p+4].hex())
+                h=struct.unpack_from('<4s6H3I5H2I',z,p)
+                name_len,extra_len,comment_len=h[10],h[11],h[12]
+                name=z[p+46:p+46+name_len].decode('utf8','replace')
+                files.append({'path':name,'compressed_bytes':h[8],'original_bytes':h[9],'method':h[4],'local_header_byte_offset':h[16]})
+                p+=46+name_len+extra_len+comment_len
+              rep['outcome']='VERIFIED_ZIP_CENTRAL_DIRECTORY_ONLY'
+              rep['member_count']=len(files);rep['members']=files
+              print('E496_NEW_ZIP_MEMBERS',json.dumps(files[:100],ensure_ascii=False)[:18000],flush=True)
+          except Exception as err:rep['error']=repr(err)[:800];rep['outcome']=rep.get('outcome','REMOTE_INDEX_FAILED')
+          (out/'E496_2026_Zenodo_zip_remote_range_source_index.json').write_text(json.dumps(rep,ensure_ascii=False,indent=2))
+          print('E496_REMOTE_INDEX_STATUS',rep['outcome'],rep.get('member_count'),rep.get('received_bytes'),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E496-Gervais2026-842MB-remote-index-not-full-zip
+          path: e496_2026_remote_zip_index/
+          retention-days: 21
+          if-no-files-found: error
