@@ -1,0 +1,59 @@
+name: "901 E492 TrIPP protocol original analysis scripts"
+on:
+  push:
+    branches: [cloud-901-e492-tripp-rawgate-20261115]
+    paths: [".github/workflows/901-e492-tripp-raw-supp.yml"]
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify source of TrIPP protocol Data S3 mmc3.zip
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,hashlib,zipfile,io,json,pathlib,time
+          root=pathlib.Path('e492_protocol_supplement');root.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E492-TrIPP-PMC8165573-supp-data-audit/1.0'
+          urls=[
+            'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC8165573/supplementaryFiles?filename=mmc3.zip',
+            'https://pmc.ncbi.nlm.nih.gov/articles/PMC8165573/bin/mmc3.zip',
+            'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8165573/bin/mmc3.zip'
+          ]
+          receipt={'source_pmcid':'PMC8165573','jats_media_href':'mmc3.zip','title':'Data S3. Related_to_quantification_and_statistical_analysis','date_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'attempts':[]}
+          for u in urls:
+            rec={'url':u}
+            try:
+              r=s.get(u,stream=True,allow_redirects=True,timeout=50)
+              b=bytearray()
+              for chunk in r.iter_content(256*1024):
+                if chunk:b.extend(chunk)
+                if len(b)>25000000:raise RuntimeError('SIZE_CAP_25MB')
+              raw=bytes(b)
+              rec.update({'http':r.status_code,'bytes':len(raw),'content_type':r.headers.get('content-type'),'sha256':hashlib.sha256(raw).hexdigest(),'head_hex':raw[:12].hex()})
+              if r.status_code==200 and zipfile.is_zipfile(io.BytesIO(raw)):
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                  names=z.namelist()
+                  rec['archive_n_members']=len(names)
+                  rec['crc_pass']=z.testzip() is None
+                  rec['inventory']=[{'path':i.filename,'compressed':i.compress_size,'uncompressed':i.file_size} for i in z.infolist()][:180]
+                if rec['crc_pass']:
+                  (root/'PMC8165573_DataS3_mmc3_original.zip').write_bytes(raw)
+                  receipt['accepted']=True
+                  receipt['accepted_sha256']=rec['sha256']
+                  rec['valid_original_zip']=True
+                  receipt['attempts'].append(rec);break
+            except Exception as e:rec['error']=repr(e)[:300]
+            receipt['attempts'].append(rec)
+          (root/'dataS3_source_receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2))
+          print('E492_S3_AUDIT',json.dumps(receipt,ensure_ascii=False)[:12000],flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E492-TrIPP-DataS3-source-or-error-receipt
+          path: e492_protocol_supplement/
+          retention-days: 21
+          if-no-files-found: error
