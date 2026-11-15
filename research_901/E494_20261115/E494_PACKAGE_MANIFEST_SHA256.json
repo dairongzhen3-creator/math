@@ -1,0 +1,109 @@
+{
+  "project": "901",
+  "stage": "E494",
+  "date": "2026-11-15",
+  "version": "immutable_source_and_QA",
+  "members": [
+    {
+      "name": "PMC5768764_2018_fullTextXML.xml",
+      "size": 211394,
+      "sha256": "a3e5574d61551fad47044d61200455bac079847785f0927a24a3da4d3e8869d8"
+    },
+    {
+      "name": "2018_JATS_source_receipt.json",
+      "size": 594,
+      "sha256": "b104cbc971b175ae0ccb9e3710caa286b790116d687468e921b166891886cd7e"
+    },
+    {
+      "name": "zenodo_746230_ReadMe.md",
+      "size": 4553,
+      "sha256": "4aa76d90746c50dbbdf11812962a38c55586428103bd97619f91e9c1162dbf30"
+    },
+    {
+      "name": "E494_2018_and_2015_public_source_receipt.json",
+      "size": 4529,
+      "sha256": "31d93cc3bee3bd0da07ba0b04f0f32bc21e04752cda67c1508e45730985dd0fe"
+    },
+    {
+      "name": "PMC4309519_localizome_fullTextXML.xml",
+      "size": 119728,
+      "sha256": "42b5f5b5d4ca1ef1c7028d5ea8e3ac2dff8790a0ac95427280cf0046af2b9afc"
+    },
+    {
+      "name": "E488_same_event_size_and_background.csv",
+      "size": 18448504,
+      "sha256": "7e4dadde0b754c78e21fa22ab03f9fdcca911a608cecefe7ab7b23ce0a527072"
+    },
+    {
+      "name": "E488_cv_predictions.csv",
+      "size": 13967373,
+      "sha256": "b06ada09bbeb9b536305d165b08550d62c67a9a39fc7360d0409be2d4438c8a1"
+    },
+    {
+      "name": "analyze_e494_size_partition.py",
+      "size": 11980,
+      "sha256": "28af405530b717fdf62ad0615e62f630f4733215328d2fa203f516c50abf7c64"
+    },
+    {
+      "name": "independent_qa_e494.py",
+      "size": 5508,
+      "sha256": "a25b322ff295222505d79d3e38b6d347086f9715805855d531e4c05130ff4ef4"
+    },
+    {
+      "name": "E494_frozen_true_divisions_size_fluorescence_split.csv",
+      "size": 7896800,
+      "sha256": "57cf0104f01fd93ba1ddde9da085c01b25d96851499828a84eca373a04a47c7a"
+    },
+    {
+      "name": "E494_by_date_source_summary.csv",
+      "size": 1548,
+      "sha256": "2d64b67e6fa6d85e1da3cae105926fe6667359f3598b0587f6656cfae44dc649"
+    },
+    {
+      "name": "E494_leave_date_out_mse.csv",
+      "size": 2101,
+      "sha256": "a74c4419a1efbae1a9b90d425f405051ace1e89833c869b5f97a50fd8bbf4a46"
+    },
+    {
+      "name": "E494_leave_date_out_logscore.csv",
+      "size": 5561,
+      "sha256": "0dccfb964d3f56788409a31281aed03a3cf0e08f3a022bb383598a16da0e75bb"
+    },
+    {
+      "name": "E494_results.json",
+      "size": 4205,
+      "sha256": "e1ee9497b3be0492281fede89d6f353d67f9ae5605c673ad8505d7fea0d8dd9d"
+    },
+    {
+      "name": "E494_independent_QA.json",
+      "size": 755,
+      "sha256": "158dfa77cd44fef94012f1e41a615a5d0a692f30c772b43076c8c89e94b5ed73"
+    },
+    {
+      "name": "E494_source_qualification.csv",
+      "size": 1645,
+      "sha256": "bde28b8856a04f7916d795e2a92993edc712a591f6126f8c0336c4a7e926203c"
+    },
+    {
+      "name": "901_E494_正式科研阶段报告_20261115.md",
+      "size": 10786,
+      "sha256": "0a03ec373b9bcf90c0d700d02afec288407594511c7c85e2cf7c19469c2ccfc4"
+    },
+    {
+      "name": "00_901_E494_最新接续卡_20261115.md",
+      "size": 3210,
+      "sha256": "12c7b9a18996c8394ae3b110d949bbc4fe5819bd39e0e230e422bf5174602e86"
+    },
+    {
+      "name": "README_REPRODUCE_E494.md",
+      "size": 2455,
+      "sha256": "4201525170afcbed3a20e9831988f9e4e349a92770fc0e79d47f8d417081458c"
+    }
+  ],
+  "claims": {
+    "observed_27000days": 27,
+    "source_biological_events": 42658,
+    "true_physical_molecule_bit": "NOT_IDENTIFIED",
+    "original_2018_357_sibling_data": "NOT_DOWNLOADED_4.43GB_ARCHIVE"
+  }
+}
