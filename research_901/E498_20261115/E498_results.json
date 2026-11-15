@@ -1,0 +1,424 @@
+{
+  "project": 901,
+  "stage": "E498",
+  "date": "2026-11-15",
+  "study": "Gervais et al 2026 Molecular Systems Biology DOI 10.1038/s44320-026-00226-5",
+  "official_zenodo_record_id": 18059846,
+  "official_large_zip_fully_downloaded": false,
+  "source_feather_original_verified_sha256": {
+    "mydegrates.feather": "2a36a01facd1bf79ab0568e88cf07ff6cfebf099ecf9419ba85a0ead19cf7676",
+    "myframes_degradation.feather": "e005351f269c85804c57f5f28d893f1db3f353ed139da4069a87820d491a4131",
+    "myframes_bleaching.feather": "6e1733d6b641f5a47dca2851520fb9a0edfed2aad6faecbaf1ec5eece99917f7",
+    "myproteomicsdata_multistrain.feather": "d0e83674a86d248f29cf7404a86251faca98b76cb4102e528ab3c4d48cc37386"
+  },
+  "source_gzip_csv_sha256": {
+    "mydegrates.feather.csv.gz": "bcf2a0e4854b17b7c1bbe5dd95f527320874e80c46ccf5c8cd2d64bd4dd7c447",
+    "myframes_degradation.feather.csv.gz": "65665284ff303ef6c88f0115d0037fb36465fde42131b200632bd9f3044c5455",
+    "myframes_bleaching.feather.csv.gz": "0a9b630b95af875ae6bba5be5bac5430acbf96cfcf4bc767576965e59f8251db",
+    "myproteomicsdata_multistrain.feather.csv.gz": "dcd7e982e3774a06c15372e967ff79a2083f344e8172c35615fbd64dcf9ff4ed"
+  },
+  "degradation": {
+    "all_four_channel_rows": 1116240,
+    "unique_cell_time_keys_four_dyes_each": 279060,
+    "source_study_acquisition_dates": [
+      "20200528",
+      "20201217"
+    ],
+    "reporter_matched_spectral_rows": 279060,
+    "matched_starvation_source_rows": 122974,
+    "matched_starvation_nonmissing_positive_after_first_hour": 3992,
+    "source_independent_low_exposure_valid_intervals_2_to_7h": 3517,
+    "tracked_physical_cells_with_valid_intervals": 439,
+    "date_strain_reporter_groups": 5,
+    "source_paired_cells_3to12h_vs_18to30h": 403,
+    "source_paired_cells_earlier_rate_greater": 368,
+    "within_cell_rate_positive_delta_fraction": 0.913151364764268,
+    "group_summary": [
+      {
+        "date": "20200528",
+        "strain": "pTrc99a_mCherry2",
+        "Fluo": "RFP",
+        "n_intervals": 100,
+        "n_unique_cells": 15,
+        "median_apparent_loss_per_h": 0.015563251218685705,
+        "mean_apparent_loss_per_h": 0.016081897743521693,
+        "fraction_apparent_loss_positive": 0.99
+      },
+      {
+        "date": "20200528",
+        "strain": "pTrc99a_mVenus",
+        "Fluo": "YFP",
+        "n_intervals": 376,
+        "n_unique_cells": 55,
+        "median_apparent_loss_per_h": 0.012937121431991959,
+        "mean_apparent_loss_per_h": 0.014039753950851401,
+        "fraction_apparent_loss_positive": 0.901595744680851
+      },
+      {
+        "date": "20201217",
+        "strain": "pTrc99a_mCerulean",
+        "Fluo": "CFP",
+        "n_intervals": 1025,
+        "n_unique_cells": 129,
+        "median_apparent_loss_per_h": 0.007212166960753555,
+        "mean_apparent_loss_per_h": 0.010417440781607628,
+        "fraction_apparent_loss_positive": 0.7785365853658537
+      },
+      {
+        "date": "20201217",
+        "strain": "pTrc99a_mGFP",
+        "Fluo": "GFP",
+        "n_intervals": 908,
+        "n_unique_cells": 109,
+        "median_apparent_loss_per_h": 0.010186419260063546,
+        "mean_apparent_loss_per_h": 0.014166243014906032,
+        "fraction_apparent_loss_positive": 0.8876651982378855
+      },
+      {
+        "date": "20201217",
+        "strain": "pTrc99a_mVenus",
+        "Fluo": "YFP",
+        "n_intervals": 1108,
+        "n_unique_cells": 131,
+        "median_apparent_loss_per_h": 0.006359786520891698,
+        "mean_apparent_loss_per_h": 0.008632064899674705,
+        "fraction_apparent_loss_positive": 0.8176895306859205
+      }
+    ],
+    "per_group_paired": [
+      {
+        "date": "20200528",
+        "strain": "pTrc99a_mCherry2",
+        "Fluo": "RFP",
+        "n_cells": 13,
+        "n_early_greater": 10,
+        "median_early_loss_per_h": 0.020594559917561168,
+        "median_late_loss_per_h": 0.012939898559757551,
+        "median_within_cell_early_minus_late_per_h": 0.007110757669363059
+      },
+      {
+        "date": "20200528",
+        "strain": "pTrc99a_mVenus",
+        "Fluo": "YFP",
+        "n_cells": 48,
+        "n_early_greater": 43,
+        "median_early_loss_per_h": 0.025079075234888455,
+        "median_late_loss_per_h": 0.008806668732541219,
+        "median_within_cell_early_minus_late_per_h": 0.014738278481853696
+      },
+      {
+        "date": "20201217",
+        "strain": "pTrc99a_mCerulean",
+        "Fluo": "CFP",
+        "n_cells": 113,
+        "n_early_greater": 102,
+        "median_early_loss_per_h": 0.022868712937756677,
+        "median_late_loss_per_h": 0.007543474340084132,
+        "median_within_cell_early_minus_late_per_h": 0.016245265277561354
+      },
+      {
+        "date": "20201217",
+        "strain": "pTrc99a_mGFP",
+        "Fluo": "GFP",
+        "n_cells": 102,
+        "n_early_greater": 90,
+        "median_early_loss_per_h": 0.02490911240763609,
+        "median_late_loss_per_h": 0.01259669150947855,
+        "median_within_cell_early_minus_late_per_h": 0.010144056128930524
+      },
+      {
+        "date": "20201217",
+        "strain": "pTrc99a_mVenus",
+        "Fluo": "YFP",
+        "n_cells": 127,
+        "n_early_greater": 123,
+        "median_early_loss_per_h": 0.019998092119264486,
+        "median_late_loss_per_h": 0.0065643168204479055,
+        "median_within_cell_early_minus_late_per_h": 0.013553060364196318
+      }
+    ]
+  },
+  "author_source_degradation_model": {
+    "form": "gamma(t)=gamma0 exp(-omega*t); S(t)=exp[-gamma0/omega*(1-exp(-omega*t))]",
+    "rates_unit": "per hour as in source Rmd time_sec/3600",
+    "all_four_reporters": [
+      {
+        "Fluo1": "CFP",
+        "author_gamma_init_per_h": 0.0315,
+        "author_omega_per_h": 0.0879999999999999,
+        "decay_rate_halving_time_h": 7.876672506363024,
+        "model_only_infinite_time_extrapolation": 0.6991048517775832,
+        "model_old_fluorescent_label_survival_5h": 0.8803649152098364,
+        "model_old_fluorescent_label_survival_10h": 0.8110049536237861,
+        "model_old_fluorescent_label_survival_30h": 0.7171928872786644,
+        "model_old_fluorescent_label_survival_60h": 0.7003803833773476
+      },
+      {
+        "Fluo1": "GFP",
+        "author_gamma_init_per_h": 0.0287,
+        "author_omega_per_h": 0.0340999999999999,
+        "decay_rate_halving_time_h": 20.326896790614292,
+        "model_only_infinite_time_extrapolation": 0.4310021378253764,
+        "model_old_fluorescent_label_survival_5h": 0.8763995055752335,
+        "model_old_fluorescent_label_survival_10h": 0.784126417772826,
+        "model_old_fluorescent_label_survival_30h": 0.5832966367978205,
+        "model_old_fluorescent_label_survival_60h": 0.48053306716634137
+      },
+      {
+        "Fluo1": "RFP",
+        "author_gamma_init_per_h": 0.0221,
+        "author_omega_per_h": 0.029,
+        "decay_rate_halving_time_h": 23.90162691586018,
+        "model_only_infinite_time_extrapolation": 0.4666998415596359,
+        "model_old_fluorescent_label_survival_5h": 0.902251185559311,
+        "model_old_fluorescent_label_survival_10h": 0.8254384967491613,
+        "model_old_fluorescent_label_survival_30h": 0.642236288887199,
+        "model_old_fluorescent_label_survival_60h": 0.5334924738877364
+      },
+      {
+        "Fluo1": "YFP",
+        "author_gamma_init_per_h": 0.02265,
+        "author_omega_per_h": 0.0519999999999999,
+        "decay_rate_halving_time_h": 13.329753472306665,
+        "model_only_infinite_time_extrapolation": 0.6468913528518703,
+        "model_old_fluorescent_label_survival_5h": 0.9050866031257226,
+        "model_old_fluorescent_label_survival_10h": 0.8381003032172737,
+        "model_old_fluorescent_label_survival_30h": 0.7088959637938828,
+        "model_old_fluorescent_label_survival_60h": 0.6594539865095345
+      }
+    ],
+    "extrapolation_warning": "Model-defined survival of pre-existing tagged fluorescent reporter, not directly observed molecule count or full lifetime survival; no absolute copy calibration."
+  },
+  "bleaching": {
+    "source_rows": 91838,
+    "source_dates": [
+      "20200128",
+      "20201008",
+      "20201217"
+    ],
+    "cell_phase_weighted_slopes_n6plus": 1659,
+    "positive_author_selection_cell_phase_slopes": 1446,
+    "positive_fraction": 0.8716094032549728,
+    "yfp_growth_greater_than_starvation_median_source_phase_dates": 3,
+    "model_scope": "Signal already source degradation-corrected; apparent photobleaching slopes include imaging schedule, not per-exposure photon quantum yield.",
+    "by_group": [
+      {
+        "date": "20200128",
+        "Fluo_sig": "RFP",
+        "phase_idx": 1,
+        "n_cells": 280,
+        "n_positive": 271,
+        "median_all_source_rate_per_h": 0.17488902366306608,
+        "median_positive_only_per_h": 0.17715640084877132,
+        "n_source_frames": 4080,
+        "fraction_positive": 0.9678571428571429,
+        "phase": "growth"
+      },
+      {
+        "date": "20200128",
+        "Fluo_sig": "RFP",
+        "phase_idx": 2,
+        "n_cells": 48,
+        "n_positive": 48,
+        "median_all_source_rate_per_h": 0.03248079689790928,
+        "median_positive_only_per_h": 0.03248079689790928,
+        "n_source_frames": 4320,
+        "fraction_positive": 1.0,
+        "phase": "starvation"
+      },
+      {
+        "date": "20200128",
+        "Fluo_sig": "YFP",
+        "phase_idx": 1,
+        "n_cells": 286,
+        "n_positive": 282,
+        "median_all_source_rate_per_h": 0.30808000533158536,
+        "median_positive_only_per_h": 0.3104437602187594,
+        "n_source_frames": 4228,
+        "fraction_positive": 0.986013986013986,
+        "phase": "growth"
+      },
+      {
+        "date": "20200128",
+        "Fluo_sig": "YFP",
+        "phase_idx": 2,
+        "n_cells": 45,
+        "n_positive": 45,
+        "median_all_source_rate_per_h": 0.04804499416660648,
+        "median_positive_only_per_h": 0.04804499416660648,
+        "n_source_frames": 4365,
+        "fraction_positive": 1.0,
+        "phase": "starvation"
+      },
+      {
+        "date": "20201008",
+        "Fluo_sig": "CFP",
+        "phase_idx": 1,
+        "n_cells": 88,
+        "n_positive": 62,
+        "median_all_source_rate_per_h": 0.027166468888312666,
+        "median_positive_only_per_h": 0.04554855439630309,
+        "n_source_frames": 1879,
+        "fraction_positive": 0.7045454545454546,
+        "phase": "growth"
+      },
+      {
+        "date": "20201008",
+        "Fluo_sig": "CFP",
+        "phase_idx": 2,
+        "n_cells": 81,
+        "n_positive": 47,
+        "median_all_source_rate_per_h": 0.0012240483336514066,
+        "median_positive_only_per_h": 0.003777228684603851,
+        "n_source_frames": 17497,
+        "fraction_positive": 0.5802469135802469,
+        "phase": "starvation"
+      },
+      {
+        "date": "20201008",
+        "Fluo_sig": "YFP",
+        "phase_idx": 1,
+        "n_cells": 161,
+        "n_positive": 161,
+        "median_all_source_rate_per_h": 0.3640081075580385,
+        "median_positive_only_per_h": 0.3640081075580385,
+        "n_source_frames": 2567,
+        "fraction_positive": 1.0,
+        "phase": "growth"
+      },
+      {
+        "date": "20201008",
+        "Fluo_sig": "YFP",
+        "phase_idx": 2,
+        "n_cells": 98,
+        "n_positive": 98,
+        "median_all_source_rate_per_h": 0.04160665342814655,
+        "median_positive_only_per_h": 0.04160665342814655,
+        "n_source_frames": 8665,
+        "fraction_positive": 1.0,
+        "phase": "starvation"
+      },
+      {
+        "date": "20201217",
+        "Fluo_sig": "CFP",
+        "phase_idx": 1,
+        "n_cells": 32,
+        "n_positive": 23,
+        "median_all_source_rate_per_h": 0.01438271846989645,
+        "median_positive_only_per_h": 0.02719005758907349,
+        "n_source_frames": 588,
+        "fraction_positive": 0.71875,
+        "phase": "growth"
+      },
+      {
+        "date": "20201217",
+        "Fluo_sig": "CFP",
+        "phase_idx": 2,
+        "n_cells": 78,
+        "n_positive": 61,
+        "median_all_source_rate_per_h": 0.0034402467316743076,
+        "median_positive_only_per_h": 0.004775346986691633,
+        "n_source_frames": 14188,
+        "fraction_positive": 0.782051282051282,
+        "phase": "starvation"
+      },
+      {
+        "date": "20201217",
+        "Fluo_sig": "GFP",
+        "phase_idx": 1,
+        "n_cells": 254,
+        "n_positive": 159,
+        "median_all_source_rate_per_h": 0.011419580724565098,
+        "median_positive_only_per_h": 0.03424442107087837,
+        "n_source_frames": 4556,
+        "fraction_positive": 0.6259842519685039,
+        "phase": "growth"
+      },
+      {
+        "date": "20201217",
+        "Fluo_sig": "GFP",
+        "phase_idx": 2,
+        "n_cells": 64,
+        "n_positive": 45,
+        "median_all_source_rate_per_h": 0.002934680503239,
+        "median_positive_only_per_h": 0.004408800576184399,
+        "n_source_frames": 16154,
+        "fraction_positive": 0.703125,
+        "phase": "starvation"
+      },
+      {
+        "date": "20201217",
+        "Fluo_sig": "YFP",
+        "phase_idx": 1,
+        "n_cells": 67,
+        "n_positive": 67,
+        "median_all_source_rate_per_h": 0.3860021059531554,
+        "median_positive_only_per_h": 0.3860021059531554,
+        "n_source_frames": 863,
+        "fraction_positive": 1.0,
+        "phase": "growth"
+      },
+      {
+        "date": "20201217",
+        "Fluo_sig": "YFP",
+        "phase_idx": 2,
+        "n_cells": 77,
+        "n_positive": 77,
+        "median_all_source_rate_per_h": 0.04243069802274355,
+        "median_positive_only_per_h": 0.04243069802274355,
+        "n_source_frames": 6698,
+        "fraction_positive": 1.0,
+        "phase": "starvation"
+      }
+    ]
+  },
+  "proteomics": {
+    "source_rows": 130200,
+    "source_genes": 2604,
+    "source_strain_backgrounds": 10,
+    "source_times_h": [
+      -2.5,
+      -1.5,
+      1.4,
+      21.4,
+      45.4
+    ],
+    "source_log_signal_missing_rows": 16543,
+    "missing_fraction": 0.1270583717357911,
+    "reported_signal_not_absolute_copy": true,
+    "per_source_time": [
+      {
+        "time_h": 1.4,
+        "source_genes_with_at_least_5_strain_backgrounds": 2301,
+        "source_genes_with_all_10_strain_backgrounds": 1926,
+        "median_across_backgrounds_gene_std_ln": 0.31812705140227704,
+        "median_across_backgrounds_gene_span_ln": 0.9796223628847571,
+        "median_pairwise_spearman_between_strain_backgrounds": 0.6265516664181179,
+        "pairwise_source_strain_comparisons": 45
+      },
+      {
+        "time_h": 21.4,
+        "source_genes_with_at_least_5_strain_backgrounds": 2197,
+        "source_genes_with_all_10_strain_backgrounds": 1868,
+        "median_across_backgrounds_gene_std_ln": 0.30413628501071716,
+        "median_across_backgrounds_gene_span_ln": 0.9322032478664699,
+        "median_pairwise_spearman_between_strain_backgrounds": 0.7260340381936372,
+        "pairwise_source_strain_comparisons": 45
+      },
+      {
+        "time_h": 45.4,
+        "source_genes_with_at_least_5_strain_backgrounds": 2190,
+        "source_genes_with_all_10_strain_backgrounds": 1898,
+        "median_across_backgrounds_gene_std_ln": 0.32529551488133646,
+        "median_across_backgrounds_gene_span_ln": 0.9859305127897879,
+        "median_pairwise_spearman_between_strain_backgrounds": 0.7318443236771891,
+        "pairwise_source_strain_comparisons": 45
+      }
+    ],
+    "source_limit": "Per-gene concentration ratios judged insufficiently precise by original paper; strain differences are not same-strain independent technical repeats."
+  },
+  "raw_mother_daughter_transfer_information_bits": "NOT_IDENTIFIED",
+  "biological_independent_experiment_count_not_equal_to_rows": true,
+  "no_merge_with_Kscheschinski_2026_lineages": true,
+  "publication_status": "PUBLICATION_NO_GO"
+}
