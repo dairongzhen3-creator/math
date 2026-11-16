@@ -109,8 +109,8 @@ while i<len(cd):
    if f'/{gl}/' not in name:continue
    base=pathlib.PurePosixPath(name).name
    if base.endswith('_kymo.tif'):kind='kymo'
-   elif base.startswith('CellStats__') and base.endswith('.csv'):kind='stats'
-   elif base.startswith('glf_') and base.endswith('.png') and base[4:-4].isdigit() and f0-2<=int(base[4:-4])<=f1+2:kind=base
+   elif base.startswith('CellStats__') and base.endswith('.csv') and '/20221220_analysis/export_data__20221220_analysis/' in name:kind='stats'
+   elif base.startswith('glf_') and base.endswith('.png') and '/20221220_analysis/export_data__20221220_analysis/' in name and base[4:-4].isdigit() and f0-2<=int(base[4:-4])<=f1+2:kind=base
    else:continue
    raw,com,off=zip64(ex,h[9],h[8],h[16])
    found[gl].setdefault(kind,[]).append({'name':name,'raw':raw,'compressed':com,'off':off,'crc':h[7],'method':h[4]})
