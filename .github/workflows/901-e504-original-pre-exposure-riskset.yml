@@ -1,0 +1,35 @@
+name: "901 E504 pre-exposure mother cohort from authenticated E500 Feather"
+on:
+  push:
+    branches: [cloud-901-e504-riskset-20261116]
+    paths:
+      - ".github/workflows/901-e504-original-pre-exposure-riskset.yml"
+      - "research_901/E504_20261116/**"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-source-riskset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve previously authenticated E500 original source; no new upstream data search
+        uses: actions/download-artifact@v4
+        with:
+          name: 901-E500-verified-original-illumination-control-and-true-fate
+          run-id: 43731881264
+          github-token: ${{ github.token }}
+          path: original
+      - name: Install Arrow runtime
+        run: python -m pip install -q pyarrow pandas numpy
+      - name: Exact original-source and pre-exposure risk set audit plus independent Arrow QA
+        run: python research_901/E504_20261116/analyze_e504_original_cohort.py
+      - name: Preserve complete source-specific E504 CSV and JSON receipts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E504-source-verified-pre-exposure-riskset
+          path: e504_audit/
+          retention-days: 21
+          if-no-files-found: error
