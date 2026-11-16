@@ -4,6 +4,7 @@ on:
     branches: [cloud-901-e505-moma-tracks-20261116]
     paths:
       - ".github/workflows/901-e505-moma-csv-pilot.yml"
+      - "research_901/E505_20261116/**"
 permissions:
   contents: read
 jobs:
