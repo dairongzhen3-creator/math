@@ -1,0 +1,38 @@
+name: "901 E511 official MoMA ROI source settings and log audit"
+on:
+  push:
+    branches: [cloud-901-e511-original-moma-roi-config-20261116]
+    paths:
+      - ".github/workflows/901-e511-roi-source-settings.yml"
+      - "research_901/E511_20261116/e511_original_moma_parameter_audit.py"
+permissions:
+  contents: read
+jobs:
+  sidecars:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        archive:
+          - 20221220_E08_GFP_pl.zip
+          - 20221220_rplN_GFP_pl.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E511_20261116
+      - name: Install source-range access
+        run: python -m pip install -q requests
+      - name: Authenticate per-GL MoMA properties, metadata, and logs directly from official original ZIP
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+        run: python research_901/E511_20261116/e511_original_moma_parameter_audit.py --archive "$ARCHIVE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E511-original-parameter-source-${{ matrix.archive }}
+          path: e511_source_sidecars/
+          retention-days: 30
+          if-no-files-found: warn
