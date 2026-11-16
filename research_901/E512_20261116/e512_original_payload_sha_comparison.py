@@ -173,7 +173,7 @@ for gl in GLS[ARG.archive]:
     elif kind in ('gurobi_model.sol','gurobi_model.mst'):
      rec['first_10_lines']=b.decode('utf8','replace').splitlines()[:10]
    source_rows.append(rec)
-  assert 'main' in meta and 'cost' in meta
+ assert 'main' in meta and 'cost' in meta
  print('E512_SOURCE_PAIR_COMPARISON',json.dumps({
    'gl':gl,'probability_map_exact_sha_match':meta['main']['source_file_byte_sha256']==meta['cost']['source_file_byte_sha256'],
    'probability_map_exact_selected_array_sha_match':meta['main']['selected_array_sha256']==meta['cost']['selected_array_sha256'],
