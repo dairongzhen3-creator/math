@@ -69,7 +69,7 @@ assert n==cnt and i==sz
 png=[e for e in entries if e['selected'] and e['path'].endswith('.png')]
 stat=[e for e in entries if e['selected'] and e['path'].endswith('.csv')]
 kymos=[e for e in entries if e['selected'] and e['path'].endswith('_kymo.tif')]
-assert len(png)==len(targetframes) and len(stat)==1 and len(kymos)==1,(len(png),len(stat),len(kymos)))
+assert len(png)==len(targetframes) and len(stat)==1 and len(kymos)==1,(len(png),len(stat),len(kymos))
 rec={'project':901,'round':'E506','GL':gl,'archive':a.archive,'archive_bytes':N,'source_cdir_sha':want_cd,'source_entries':n,'expected_parent_last_frame':f0,'expected_daughter_first_frame':f1,'source_tiff_metadata':[e for e in entries if e['tiff']],'raw_png_sources':[],'raw_cellstats':None,'original_gl_kymograph':None,'note':'glf PNGs are MoMA processed diagnostic frames; raw TIFF provenance assessed separately; not independent original camera data'}
 for e in sorted(png+stat+kymos,key=lambda x:x['path']):
  assert e['raw_bytes']<15000000 and e['compressed_bytes']<4194304
