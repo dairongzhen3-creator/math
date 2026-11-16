@@ -166,7 +166,6 @@ for gl in GLS[ARG.archive]:
       print('E512_AUTHENTIC_COMPONENT_FOREST',gl,ver,len(b),digest,json.dumps(desc,ensure_ascii=False),flush=True)
      except (ValueError,UnicodeError) as e:
       forests[ver]={'json_parse_failed':str(e)}
-     del obj
     elif kind=='curation.moma':
      rec['utf8_first_500']=b[:500].decode('utf8','replace')
     elif kind.startswith('assignment') or kind=='hypothesis_states.csv':
