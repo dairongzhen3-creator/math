@@ -1,0 +1,127 @@
+name: "901 E502 targeted source-original MoMA sidecars no images"
+on:
+  push:
+    branches: [cloud-901-e502-bia-zip-directory-20261116]
+    paths: [".github/workflows/901-e502-two-original-sidecars.yml"]
+permissions:
+  contents: read
+jobs:
+  limited-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read original mm.properties and analysis_metadata for two contrasting original GLs by HTTP206 only
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,struct,hashlib,json,zlib,re,pathlib,time,collections
+          O=pathlib.Path('e502_sidecar_pilot');O.mkdir(exist_ok=True)
+          s=requests.Session();s.headers['User-Agent']='901-E502-direct-original-MoMA-sidecars-no-images/1.0'
+          base='https://www.ebi.ac.uk/biostudies/files/S-BIAD2506/'
+          man=s.get(base+'Statphase_Transition_GLs/deepMoMA.json',timeout=(15,45));man.raise_for_status()
+          assert hashlib.sha256(man.content).hexdigest()=='f564c31f5497a70d898dc4988582f086237d6eaeefe1fbd6272743618267826f'
+          lst=json.loads(man.content)
+          names={'20221220_E08_GFP.zip':'Pos28_GL17','20221220_NO_LIGHT_E08_GFP.zip':'Pos25_GL14'}
+          tasks=[x for x in lst if pathlib.PurePosixPath(x['path']).name in names]
+          assert len(tasks)==2
+          record={'original_accession':'S-BIAD2506','utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'records':[],
+                  'max_single_range':4194304,'max_compressed_member':2097152,'no_imaging_payload':True}
+          def getbytes(url,a,b,n):
+            assert 0<=a<=b<n and b-a+1<=4194304
+            resp=s.get(url,headers={'Range':f'bytes={a}-{b}'},stream=True,timeout=(15,45))
+            if resp.status_code!=206:raise RuntimeError(f'bad_status_{resp.status_code}')
+            if resp.headers.get('Content-Range')!=f'bytes {a}-{b}/{n}':raise RuntimeError('content_range_mismatch')
+            buf=bytearray()
+            for chunk in resp.iter_content(65536):
+              if chunk:buf+=chunk
+              if len(buf)>b-a+1:raise ValueError('range_size_exceeded')
+            if len(buf)!=b-a+1:raise ValueError('range_length_bad')
+            return bytes(buf)
+          def zip64_read(extra,raw,comp,off):
+            q=0
+            if any(z==0xffffffff for z in (raw,comp,off)):
+              p=0;z=None
+              while p<len(extra):
+                tag,n=struct.unpack_from('<HH',extra,p);v=extra[p+4:p+4+n];p+=4+n
+                if tag==1:z=v;break
+              if z is None:raise ValueError('zip64_extra_missing')
+              if raw==0xffffffff:raw=struct.unpack_from('<Q',z,q)[0];q+=8
+              if comp==0xffffffff:comp=struct.unpack_from('<Q',z,q)[0];q+=8
+              if off==0xffffffff:off=struct.unpack_from('<Q',z,q)[0];q+=8
+            return raw,comp,off
+          for t in tasks:
+            arch=pathlib.PurePosixPath(t['path']).name
+            url=base+t['path'];n=int(t['size']);rec={'archive':arch,'registered_bytes':n,'target_gl':names[arch],'files':[]}
+            try:
+              tail=getbytes(url,n-131072,n-1,n);p=tail.rfind(b'PK\x05\x06');assert p>=0
+              e=struct.unpack_from('<4s4H2IH',tail,p)
+              count,sz,at=e[4],e[5],e[6]
+              loc=tail.rfind(b'PK\x06\x07',0,p)
+              if loc>=0 and (count==65535 or sz==0xffffffff or at==0xffffffff):
+                zoff=struct.unpack_from('<Q',tail,loc+8)[0]
+                z=getbytes(url,zoff,zoff+55,n)
+                assert z[:4]==b'PK\x06\x06'
+                count=struct.unpack_from('<Q',z,32)[0]
+                sz=struct.unpack_from('<Q',z,40)[0]
+                at=struct.unpack_from('<Q',z,48)[0]
+              if sz>40000000:raise ValueError('directory_cap')
+              cd=bytearray()
+              for start in range(at,at+sz,4194304):
+                cd+=getbytes(url,start,min(at+sz-1,start+4194303),n)
+              assert len(cd)==sz
+              matches={};i=0;total=0
+              while i<len(cd):
+                h=struct.unpack_from('<4s6H3I5H2I',cd,i);assert h[0]==b'PK\x01\x02'
+                nl,el,cl=h[10:13]
+                name=cd[i+46:i+46+nl].decode('utf-8' if h[3]&2048 else 'cp437','replace')
+                extra=cd[i+46+nl:i+46+nl+el]
+                if ('/'+names[arch]+'/') in name and ('__BKP' not in name) and name.endswith(('/mm.properties','/analysis_metadata.json','/moma.log')):
+                  raw,compressed,offset=zip64_read(extra,h[9],h[8],h[16])
+                  typ=pathlib.PurePosixPath(name).name
+                  matches.setdefault(typ,[]).append({'name':name,'raw':raw,'compressed':compressed,'offset':offset,'method':h[4],'crc':h[7]})
+                total+=1;i+=46+nl+el+cl
+              assert total==count and i==sz
+              rec.update({'directory_entries':total,'verified_directory_sha256':hashlib.sha256(cd).hexdigest()})
+              for typ in ('mm.properties','analysis_metadata.json','moma.log'):
+                if typ not in matches:
+                  rec['files'].append({'type':typ,'status':'NOT_LISTED'});continue
+                target=matches[typ][0]
+                fr={'type':typ,'listed_path':target['name'],'target_compressed_bytes':target['compressed']}
+                try:
+                  assert target['raw']<=2097152 and target['compressed']<=2097152
+                  off=target['offset']
+                  hdr=getbytes(url,off,off+29,n)
+                  h=struct.unpack('<4s5H3I2H',hdr)
+                  assert h[0]==b'PK\x03\x04'
+                  nl,el=h[-2:]
+                  header=getbytes(url,off+30,off+30+nl+el-1,n) if nl+el else b''
+                  assert header[:nl].decode('utf8' if h[2]&2048 else 'cp437','replace')==target['name']
+                  start=off+30+nl+el
+                  blob=getbytes(url,start,start+target['compressed']-1,n)
+                  if target['method']==8:original=zlib.decompress(blob,-15)
+                  elif target['method']==0:original=blob
+                  else:raise ValueError('unsupported_zip_method')
+                  if len(original)!=target['raw'] or zlib.crc32(original)!=target['crc']:raise ValueError('CRC_LENGTH_MISMATCH')
+                  text=original.decode('utf8','replace')
+                  safe=arch.replace('.zip','')+'__'+names[arch]+'__'+typ
+                  (O/safe).write_bytes(original)
+                  terms={w:len(re.findall(w,text,re.I)) for w in ('exposure','light','photon','laser','power','led','acquisi','gain','fluo','instrument','micro-manager')}
+                  fr.update({'status':'ORIGINAL_CRC_PASS','raw_sha256':hashlib.sha256(original).hexdigest(),
+                             'raw_bytes':len(original),'search_term_counts':terms,
+                             'head_500':text[:500]})
+                except Exception as e:fr['status']='FAILED';fr['error']=repr(e)[:400]
+                rec['files'].append(fr)
+            except Exception as e:rec['error']=repr(e)[:700]
+            record['records'].append(rec)
+            print('E502_SIDECAR',json.dumps({k:v for k,v in rec.items() if k not in ('files',)},ensure_ascii=False),flush=True)
+            print('E502_MEMBERS',[(x['type'],x['status'],x.get('raw_bytes'),x.get('search_term_counts')) for x in rec['files']],flush=True)
+          (O/'E502_exact_authentic_moma_sidecars_receipt.json').write_text(json.dumps(record,ensure_ascii=False,indent=2))
+          
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E502-two-original-light-control-MoMA-sidecars
+          path: e502_sidecar_pilot/
+          retention-days: 21
+          if-no-files-found: error
