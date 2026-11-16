@@ -1,0 +1,145 @@
+name: "901 E502 official BIA source and bounded ZIP64 directory audit"
+on:
+  push:
+    branches: [cloud-901-e502-bia-zip-directory-20261116]
+    paths: [".github/workflows/901-e502-bia-zip-directory.yml"]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Authenticate official 8 file metadata and inspect ZIP64 directories without image payload
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, json, re, hashlib, struct, gzip, csv, io, collections, pathlib, requests, time, traceback
+          OUT=pathlib.Path("e502_bia_source_scope"); OUT.mkdir(exist_ok=True)
+          S=requests.Session(); S.headers.update({"User-Agent":"901-E502-BIA-metadata-only-original-20261116"})
+          ACCESSION="S-BIAD2506"
+          BASEPATH="https://www.ebi.ac.uk/biostudies/files/S-BIAD2506/"
+          API="https://www.ebi.ac.uk/biostudies/api/v1/studies/S-BIAD2506"
+          expected={
+           "deepMoMA.json":"f564c31f5497a70d898dc4988582f086237d6eaeefe1fbd6272743618267826f",
+           "legacyMoMA.json":"c3ca3b6903b6837e0860d891a85ba5e867b1224856ba2486d4112b2ba26b58ef",
+           "biostudies_study.json":"4b0893e0ad77faa7f024f3d0247fb3151d5c64262a4e2f20f2613ac0eab514e2",
+           "biostudies_info.json":"353b809d8cb7cf6c5a49558ed7cc2d429234274643eceed82dcb15fc88e8be38"}
+          res={"accession":ACCESSION,"utc":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"source_reads":[],"target_archives":[],"no_image_payload_requested":True,"per_request_cap_bytes":8388608}
+          def limited_full(url,limit=200000):
+              r=S.get(url,timeout=(12,35),stream=True,allow_redirects=True)
+              if not r.ok: raise RuntimeError(f"HTTP_{r.status_code}_{r.url}")
+              out=bytearray()
+              for c in r.iter_content(65536):
+                  if c:out.extend(c)
+                  if len(out)>limit:raise RuntimeError("METADATA_CAP_EXCEEDED")
+              return bytes(out)
+          sources={}
+          for name,url in [
+           ("biostudies_info.json",API+"/info"),
+           ("biostudies_study.json",API),
+           ("deepMoMA.json",BASEPATH+"Statphase_Transition_GLs/deepMoMA.json"),
+           ("legacyMoMA.json",BASEPATH+"Statphase_Transition_GLs/legacyMoMA.json")]:
+              item={"name":name,"url":url}
+              try:
+                  data=limited_full(url,limit=200000)
+                  item.update({"actual_bytes":len(data),"sha256":hashlib.sha256(data).hexdigest(),
+                               "matches_E500_frozen_sha":hashlib.sha256(data).hexdigest()==expected[name]})
+                  sources[name]=json.loads(data)
+                  (OUT/name).write_bytes(data)
+              except Exception as e:item["error"]=repr(e)[:700]
+              res["source_reads"].append(item)
+              print("E502_METADATA",json.dumps(item,ensure_ascii=False),flush=True)
+          if "deepMoMA.json" in sources and "legacyMoMA.json" in sources:
+              all_files=sources["deepMoMA.json"]+sources["legacyMoMA.json"]
+              rows=[]
+              for f in all_files:
+                  attrs={x["name"]:x["value"] for x in f.get("attributes",[])}
+                  rows.append({"path":f["path"],"size":f.get("size"),**attrs})
+              with (OUT/"E502_official_119_top_level_file_inventory.csv").open("w",newline="",encoding="utf-8") as p:
+                  cols=sorted({k for row in rows for k in row})
+                  w=csv.DictWriter(p,fieldnames=cols);w.writeheader();w.writerows(rows)
+              res["registry"]={"total":len(rows),"paths_unique":len({x["path"] for x in rows}),
+                "all_zip":all(x["path"].lower().endswith(".zip") for x in rows),
+                "metadata_key_union":sorted({k for r in rows for k in r if k not in ("path","size")})}
+              targets=[x for x in rows if x.get("Date")=="20221220"]
+              res["registry"]["target_count"]=len(targets)
+              res["registry"]["target_total_registered_bytes"]=sum(int(x["size"]) for x in targets)
+              res["registry"]["conditions_by_experiment"]=dict(collections.Counter(x.get("Experiment","") for x in targets))
+              (OUT/"E502_20221220_8_original_file_registry.json").write_text(json.dumps(targets,ensure_ascii=False,indent=2))
+              # Audit only the ZIP directory by strict HTTP byte ranges: never retrieve or decompress image payload.
+              def range_read(url,a,b,declared_size,cap=8388608):
+                  if a<0 or b<a or b>=declared_size or b-a+1>cap:raise ValueError("RANGE_REJECTED")
+                  r=S.get(url,headers={"Range":f"bytes={a}-{b}"},timeout=(12,35),stream=True,allow_redirects=True)
+                  if r.status_code!=206:
+                      r.close();raise RuntimeError(f"EXPECTED_206_GOT_{r.status_code}")
+                  cr=r.headers.get("Content-Range","")
+                  if cr != f"bytes {a}-{b}/{declared_size}":
+                      r.close();raise RuntimeError(f"BAD_CONTENT_RANGE_{cr[:120]}")
+                  data=bytearray()
+                  for c in r.iter_content(131072):
+                      if c:data.extend(c)
+                      if len(data)>b-a+1:raise RuntimeError("STREAM_EXCEEDED_RANGE")
+                  if len(data)!=b-a+1:raise RuntimeError(f"RANGE_SHORT_{len(data)}")
+                  return bytes(data)
+              def central_directory(url,n):
+                  start=max(0,n-131072);tail=range_read(url,start,n-1,n,131072)
+                  pos=tail.rfind(b"PK\x05\x06")
+                  if pos<0 or len(tail)-pos<22:raise ValueError("EOCD_NOT_IN_TAIL")
+                  h=struct.unpack_from("<4s4H2IH",tail,pos)
+                  count,cdsize,cdoff=h[4],h[5],h[6]
+                  if count==65535 or cdsize==0xffffffff or cdoff==0xffffffff:
+                      loc=tail.rfind(b"PK\x06\x07",0,pos)
+                      if loc<0:raise ValueError("ZIP64_LOCATOR_NOT_IN_TAIL")
+                      zip64off=struct.unpack_from("<Q",tail,loc+8)[0]
+                      z64=range_read(url,zip64off,zip64off+55,n,56)
+                      if z64[:4]!=b"PK\x06\x06":raise ValueError("ZIP64_EOCD_BAD")
+                      count=struct.unpack_from("<Q",z64,32)[0]
+                      cdsize=struct.unpack_from("<Q",z64,40)[0]
+                      cdoff=struct.unpack_from("<Q",z64,48)[0]
+                  if cdsize<=0 or cdsize>8388608:raise ValueError(f"CENTRAL_DIR_CAP_{cdsize}")
+                  cd=range_read(url,cdoff,cdoff+cdsize-1,n,8388608)
+                  entries=[];i=0
+                  while i<len(cd):
+                      if cd[i:i+4]!=b"PK\x01\x02":raise ValueError(f"CD_BAD_SIG_{i}")
+                      h=struct.unpack_from("<4s6H3I5H2I",cd,i)
+                      name_len,extra_len,comment_len=h[10],h[11],h[12]
+                      data=cd[i+46:i+46+name_len]
+                      name=data.decode("utf-8" if h[3]&2048 else "cp437","replace")
+                      entries.append({"path":name,"stored_raw_bytes32":h[9],
+                                      "stored_compressed_bytes32":h[8],"method":h[4]})
+                      i+=46+name_len+extra_len+comment_len
+                  if i!=len(cd):raise ValueError("CD_NOT_FULLY_CONSUMED")
+                  return count,cdsize,entries,hashlib.sha256(cd).hexdigest()
+              for t in targets:
+                  rec={"path":t["path"],"declared_size":int(t["size"]),"experiment":t.get("Experiment"),
+                       "strain":t.get("Strain"),"status":"NOT_TRIED"}
+                  for base in [BASEPATH,"https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/506/S-BIAD2506/Files/"]:
+                      url=base+t["path"]
+                      try:
+                          count,cdsize,entries,digest=central_directory(url,int(t["size"]))
+                          if count!=len(entries):raise ValueError(f"COUNT_MISMATCH_{count}_{len(entries)}")
+                          ext=collections.Counter(pathlib.PurePosixPath(e["path"]).suffix.lower() for e in entries)
+                          candidates=[e["path"] for e in entries if re.search(r"(metadata|acqui|setting|expos|photon|power|laser|dose|\.xml$|\.json$|\.log$|\.properties$|\.cfg$|\.ini$|\.yaml$|\.yml$|raw)",e["path"],re.I)]
+                          rec.update({"status":"ZIP_CENTRAL_DIRECTORY_VERIFIED","source_url":url,"cd_bytes":cdsize,
+                                      "cd_sha256":digest,"members":count,"extension_counts":dict(ext),
+                                      "candidate_count":len(candidates),"candidate_first_150":candidates[:150]})
+                          fn=pathlib.PurePosixPath(t["path"]).name
+                          with gzip.open(OUT/(fn+".member_names.csv.gz"),"wt",encoding="utf-8",newline="") as p:
+                              w=csv.DictWriter(p,fieldnames=["path","stored_raw_bytes32","stored_compressed_bytes32","method"]);w.writeheader();w.writerows(entries)
+                          break
+                      except Exception as e:
+                          rec.setdefault("attempt_errors",[]).append({"url":url,"error":repr(e)[:420]})
+                          rec["status"]="DIRECTORY_NOT_VERIFIED"
+                  res["target_archives"].append(rec)
+                  print("E502_ZIP_DIRECTORY",json.dumps({k:v for k,v in rec.items() if k not in ("candidate_first_150","attempt_errors")},ensure_ascii=False),flush=True)
+          (OUT/"E502_BIA_bounded_byte_audit_receipt.json").write_text(json.dumps(res,indent=2,ensure_ascii=False))
+          print("E502_FINAL",json.dumps({"sources":len(res["source_reads"]),"register":res.get("registry"),"zip_pass":sum(x["status"]=="ZIP_CENTRAL_DIRECTORY_VERIFIED" for x in res["target_archives"])},ensure_ascii=False),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E502-BIA-real-8-ZIP64-directory-only
+          path: e502_bia_source_scope/
+          retention-days: 21
+          if-no-files-found: error
