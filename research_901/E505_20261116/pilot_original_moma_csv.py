@@ -95,7 +95,7 @@ for an,expect in targets.items():
         simple=f"{an[:-4]}__{gl}__{typ}.csv"
         (O/simple).write_bytes(data)
         # evidence: present source CSV column names and first three data records, no guessed schema
-        samples=list(csv.reader(io.StringIO(data.decode("utf8-sig","replace"))))[:4]
+        samples=list(csv.reader(io.StringIO(data.decode("utf-8-sig","replace"))))[:4]
         rr={"source_archive":an,"gl":gl,"kind":typ,"original_path":entry["name"],
             "original_csv_bytes":len(data),"sha256":hashlib.sha256(data).hexdigest(),"crc32":format(zlib.crc32(data),"08x"),
             "csv_header":samples[0] if samples else [],"first_3_rows":samples[1:4],"pilot_only":True}
