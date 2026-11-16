@@ -1,0 +1,45 @@
+name: "901 E512b source component masks and Div to Map curation chain"
+on:
+  push:
+    branches: [cloud-901-e512-original-probability-component-audit-20261116]
+    paths:
+      - ".github/workflows/901-e512b-solver-constraints.yml"
+      - "research_901/E512_20261116/e512_software_solution_lineage_audit.py"
+permissions:
+  actions: read
+  contents: read
+jobs:
+  direct-optimizer-contrast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - gl: Pos5_GL35
+            archive: 20221220_rplN_GFP_pl.zip
+          - gl: Pos12_GL22
+            archive: 20221220_E08_GFP_pl.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E512_20261116
+      - uses: actions/download-artifact@v4
+        with:
+          name: 901-E512-full-verified-original-${{ matrix.archive }}
+          path: verified_e512
+          run-id: 43827391164
+          github-token: ${{ github.token }}
+      - name: Verify previously original-CRC authenticated E512 artifact SHA and compare software branches at all disputed frames
+        env:
+          GL: ${{ matrix.gl }}
+        run: python research_901/E512_20261116/e512_software_solution_lineage_audit.py --gl "$GL"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E512b-original-solver-contrast-${{ matrix.gl }}
+          path: e512_optimization_audit/
+          retention-days: 30
+          if-no-files-found: warn
