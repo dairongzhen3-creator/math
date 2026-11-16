@@ -47,6 +47,6 @@ jobs:
         if: always()
         with:
           name: 901-E505-authentic-parent-${{ matrix.archive }}
-          path: e505_full_verified/${{ matrix.archive }}
+          path: e505_full_verified/
           retention-days: 21
           if-no-files-found: warn
