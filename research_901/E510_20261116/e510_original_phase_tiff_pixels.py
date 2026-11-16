@@ -119,16 +119,16 @@ def decode_zip64(ex,raw,compressed,offset):
         return raw,compressed,offset
     raise RuntimeError("missing ZIP64 extra")
 tail=get_part(SIZE-131072,SIZE-1)
-pos=tail.rfind(b"PK\\x05\\x06")
+pos=tail.rfind(bytes.fromhex("504b0506"))
 assert pos>=0
 h=struct.unpack_from("<4s4H2IH",tail,pos)
 count,cd_size,cd_offset=h[4],h[5],h[6]
 if count==65535 or cd_size==0xffffffff or cd_offset==0xffffffff:
-    pos64=tail.rfind(b"PK\\x06\\x07",0,pos)
+    pos64=tail.rfind(bytes.fromhex("504b0607"),0,pos)
     assert pos64>=0
     off=struct.unpack_from("<Q",tail,pos64+8)[0]
     v=get_part(off,off+55)
-    assert v[:4]==b"PK\\x06\\x06"
+    assert v[:4]==bytes.fromhex("504b0606")
     count=struct.unpack_from("<Q",v,32)[0]
     cd_size=struct.unpack_from("<Q",v,40)[0]
     cd_offset=struct.unpack_from("<Q",v,48)[0]
@@ -139,7 +139,7 @@ wanted=f"{ARCH[:-4]}/{GL}/20221220_glu_spcm_1_MMStack_{GL}.tif"
 found=[];off=0;n=0
 while off<len(cd):
     h=struct.unpack_from("<4s6H3I5H2I",cd,off)
-    assert h[0]==b"PK\\x01\\x02"
+    assert h[0]==bytes.fromhex("504b0102")
     nl,el,cl=h[10:13]
     name=cd[off+46:off+46+nl].decode("utf8" if h[3]&2048 else "cp437","replace")
     if name==wanted:
@@ -152,7 +152,7 @@ assert z["method"]==8 and 0<z["raw"]<650_000_000 and 0<z["compressed"]<550_000_0
 loc=z["offset"]
 lhead=get_part(loc,loc+29)
 lh=struct.unpack_from("<4s5H3I2H",lhead)
-assert lh[0]==b"PK\\x03\\x04"
+assert lh[0]==bytes.fromhex("504b0304")
 nl,el=lh[-2:]
 assert get_part(loc+30,loc+30+nl+el-1)[:nl].decode("utf8" if lh[2]&2048 else "cp437","replace")==wanted
 start=loc+30+nl+el;end=start+z["compressed"]-1
