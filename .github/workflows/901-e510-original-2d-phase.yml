@@ -1,0 +1,47 @@
+name: "901 E510 original preprocessed 2D TIFF blind event pixel intake"
+on:
+  push:
+    branches: [cloud-901-e510-original-2d-phase-pixels-20261116]
+    paths:
+      - ".github/workflows/901-e510-original-2d-phase.yml"
+      - "research_901/E510_20261116/e510_original_phase_tiff_pixels.py"
+permissions:
+  contents: read
+jobs:
+  authentic-two-dimensional-pixels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - gl: Pos5_GL35
+            archive: 20221220_rplN_GFP_pl.zip
+          - gl: Pos12_GL22
+            archive: 20221220_E08_GFP_pl.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E507_20261116
+            research_901/E508_20261116
+            research_901/E510_20261116
+      - name: Install minimal image and official source ZIP verification dependencies
+        run: python -m pip install -q requests numpy tifffile pillow
+      - name: Verify original source CellStats and regenerate frozen source event list
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+        run: python research_901/E508_20261116/e508_event_conflicts.py --archive "$ARCHIVE" --recompute-official-csv
+      - name: Authenticate official complete 2D GL TIFF and save exact pixel slices and unlabeled cards
+        env:
+          GL: ${{ matrix.gl }}
+        run: python research_901/E510_20261116/e510_original_phase_tiff_pixels.py --gl "$GL"
+      - name: Archive complete numerical source slices, blind cards, and receipt
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E510-original-2D-${{ matrix.gl }}
+          path: e510_true_2d_phase_pixels/
+          retention-days: 30
+          if-no-files-found: warn
