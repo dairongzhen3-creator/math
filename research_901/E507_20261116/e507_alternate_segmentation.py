@@ -100,7 +100,7 @@ for gl in gls:
  for version in ('main','cost'):
   entry=c[version][0];b=decode(entry)
   f=OUT/f'{gl}_{version}_CellStats.csv';f.write_bytes(b)
-  lines=[t for t in b.decode('utf8-sig').splitlines() if t.strip() and not t.startswith('#')]
+  lines=[t for t in b.decode('utf-8-sig').splitlines() if t.strip() and not t.startswith('#')]
   data=list(csv.DictReader(lines));assert len(data)>100
   events=source_events(data)
   per[version]={'records':len(data),'unique_cells':len({d['cell_ID'] for d in data}), 'unique_frames':len({d['frame'] for d in data}),'division_events':events}
