@@ -1,0 +1,43 @@
+name: "901 E507 frozen 12GL source-certified image-only division controls"
+on:
+  push:
+    branches: [cloud-901-e507-frozen-image-controls-20261116]
+    paths:
+      - ".github/workflows/901-e507-frozen-kymo.yml"
+      - "research_901/E507_20261116/e507_source_audit.py"
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        archive:
+          - 20221220_E08_GFP.zip
+          - 20221220_E08_GFP_pl.zip
+          - 20221220_rplN_GFP.zip
+          - 20221220_rplN_GFP_pl.zip
+          - 20221220_NO_LIGHT_E08_GFP.zip
+          - 20221220_NO_LIGHT_E08_GFP_pl.zip
+          - 20221220_NO_LIGHT_rplN_GFP.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E507_20261116
+      - name: Minimal verified pixel-reader dependencies
+        run: python -m pip install -q requests numpy tifffile
+      - name: Exact author source SHA, CRC, blind pixel score vs fixed technical negative controls
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+        run: python research_901/E507_20261116/e507_source_audit.py --archive "$ARCHIVE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E507-image-audit-${{ matrix.archive }}
+          path: e507_source_challenges/
+          retention-days: 21
+          if-no-files-found: warn
