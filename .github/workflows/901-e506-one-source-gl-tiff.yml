@@ -1,0 +1,29 @@
+name: "901 E506 single original preprocessed GL TIFF true pixels CRC and six frames"
+on:
+  push:
+    branches: [cloud-901-e506-original-pixel-audit-20261116]
+    paths:
+      - ".github/workflows/901-e506-one-source-gl-tiff.yml"
+      - "research_901/E506_20261116/original_full_gl_tiff_onecase.py"
+permissions:
+  contents: read
+jobs:
+  one-authentic-preprocessed-gl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E506_20261116
+      - name: Image decoder and HTTP range reader
+        run: python -m pip install -q requests tifffile pillow numpy
+      - name: Full original single TIFF member CRC, only selected pixels persisted
+        run: python research_901/E506_20261116/original_full_gl_tiff_onecase.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E506-one-original-GL-six-real-pixel-frames
+          path: e506_one_full_preprocessed_GL/
+          retention-days: 21
+          if-no-files-found: warn
