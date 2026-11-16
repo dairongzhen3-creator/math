@@ -1,0 +1,105 @@
+name: "901 E502 five large original BioImage ZIP64 metadata directory scopes"
+on:
+  push:
+    branches: [cloud-901-e502-bia-zip-directory-20261116]
+    paths: [".github/workflows/901-e502-bia-large-cdir.yml"]
+permissions:
+  contents: read
+jobs:
+  bounded-directories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify frozen file list and read five original ZIP64 directories in <=4MiB HTTP byte ranges
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,struct,hashlib,json,collections,csv,gzip,io,time,pathlib,os,re
+          O=pathlib.Path("e502_bia_large_directories");O.mkdir(exist_ok=True)
+          S=requests.Session();S.headers["User-Agent"]="901-E502-authorized-bounded-large-directory-20261116"
+          base="https://www.ebi.ac.uk/biostudies/files/S-BIAD2506/"
+          manifest_url=base+"Statphase_Transition_GLs/deepMoMA.json"
+          r=S.get(manifest_url,timeout=(15,60));r.raise_for_status()
+          data=r.content
+          assert len(data)==37313 and hashlib.sha256(data).hexdigest()=="f564c31f5497a70d898dc4988582f086237d6eaeefe1fbd6272743618267826f"
+          items=json.loads(data)
+          failnames={
+          "20221220_E08_GFP_pl.zip","20221220_E08_GFP.zip",
+          "20221220_NO_LIGHT_E08_GFP.zip",
+          "20221220_rplN_GFP_pl.zip","20221220_rplN_GFP.zip"}
+          targets=[v for v in items if pathlib.PurePosixPath(v["path"]).name in failnames]
+          assert len(targets)==5
+          receipt={"study":"S-BIAD2506","utc":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),
+          "source_manifest_sha256":hashlib.sha256(data).hexdigest(),"source_manifest_E500_SHA_MATCH":True,
+          "constraints":{"max_one_http_range_bytes":4194304,"max_per_directory_bytes":67108864,
+          "image_pixel_downloaded":False},"targets":[]}
+          def ranged(url,a,b,total):
+              assert 0<=a<=b<total and b-a+1<=4194304
+              r=S.get(url,headers={"Range":f"bytes={a}-{b}"},timeout=(15,55),stream=True)
+              if r.status_code!=206:raise ValueError(f"HTTP_NOT_206_{r.status_code}")
+              if r.headers.get("Content-Range")!=f"bytes {a}-{b}/{total}":
+                  raise ValueError(f"BAD_RANGE_{r.headers.get('Content-Range')}")
+              buf=bytearray()
+              for x in r.iter_content(131072):
+                  if x:buf+=x
+                  if len(buf)>b-a+1:raise ValueError("EXCEEDED")
+              assert len(buf)==b-a+1
+              return bytes(buf)
+          def parse_one(t):
+              path=t["path"];total=int(t["size"]);url=base+path
+              tail=ranged(url,total-131072,total-1,total)
+              p=tail.rfind(b"PK\x05\x06")
+              if p<0:raise ValueError("NO_EOCD")
+              e=struct.unpack_from("<4s4H2IH",tail,p)
+              n,dlen,dstart=e[4],e[5],e[6]
+              if n==65535 or dlen==0xffffffff or dstart==0xffffffff:
+                  loc=tail.rfind(b"PK\x06\x07",0,p)
+                  if loc<0:raise ValueError("NO_ZIP64_LOCATOR")
+                  at=struct.unpack_from("<Q",tail,loc+8)[0]
+                  z=ranged(url,at,at+55,total)
+                  assert z[:4]==b"PK\x06\x06"
+                  n=struct.unpack_from("<Q",z,32)[0]
+                  dlen=struct.unpack_from("<Q",z,40)[0]
+                  dstart=struct.unpack_from("<Q",z,48)[0]
+              if not (0<dlen<=67108864):raise ValueError(f"CD_SIZE_OVER_BOUND_{dlen}")
+              raw=bytearray();step=4194304
+              for start in range(dstart,dstart+dlen,step):
+                  end=min(dstart+dlen-1,start+step-1)
+                  raw.extend(ranged(url,start,end,total))
+              assert len(raw)==dlen
+              ent=[];i=0
+              while i<len(raw):
+                  h=struct.unpack_from("<4s6H3I5H2I",raw,i)
+                  if h[0]!=b"PK\x01\x02":raise ValueError(f"BAD_CDIR_SIG_{i}")
+                  fnlen,exlen,comlen=h[10],h[11],h[12]
+                  name=raw[i+46:i+46+fnlen].decode("utf-8" if h[3]&2048 else "cp437","replace")
+                  ent.append({"path":name,"compressed32":h[8],"raw32":h[9],"local_offset32":h[16]})
+                  i+=46+fnlen+exlen+comlen
+              if n!=len(ent) or i!=dlen:raise ValueError(f"DIR_INVALID_{n}_{len(ent)}_{i}_{dlen}")
+              basename=pathlib.PurePosixPath(path).name
+              with gzip.open(O/(basename+".cdir_names.csv.gz"),"wt",encoding="utf8",newline="") as fh:
+                  w=csv.DictWriter(fh,fieldnames=["path","compressed32","raw32","local_offset32"]);w.writeheader();w.writerows(ent)
+              ext=dict(collections.Counter(pathlib.PurePosixPath(x["path"]).suffix.lower() for x in ent))
+              cand=[x["path"] for x in ent if re.search(r"metadata\.txt|^.*acquisi|^.*expos|^.*photons?|^.*power|^.*dose|\.xml$|\.ome\.tiff?$|\.ndtiff$|mm\.properties$|analysis_metadata\.json$",x["path"],re.I)]
+              return {"path":path,"source_len":total,"status":"VERIFIED","n_entries":n,
+                      "cd_len":dlen,"cd_sha256":hashlib.sha256(raw).hexdigest(),
+                      "extensions":ext,"candidate_count":len(cand),"candidate_first_100":cand[:100],
+                      "metadata_txt":[x for x in cand if x.lower().endswith("metadata.txt")][:10],
+                      "ome_tiff":[x for x in cand if re.search(r"\.ome\.tiff?$",x,re.I)][:10]}
+          for v in targets:
+              try:
+                  x=parse_one(v)
+              except Exception as e:
+                  x={"path":v["path"],"status":"FAILED","error":repr(e)[:600]}
+              receipt["targets"].append(x)
+              print("E502_LARGE_CDIR",json.dumps({k:x.get(k) for k in ("path","status","n_entries","cd_len","candidate_count","error")},ensure_ascii=False),flush=True)
+          (O/"E502_five_large_CDIR_receipt.json").write_text(json.dumps(receipt,ensure_ascii=False,indent=2))
+          print("E502_LARGE_FINAL",sum(x["status"]=="VERIFIED" for x in receipt["targets"]),"/",len(receipt["targets"]),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E502-five-other-source-ZIP64-directories
+          path: e502_bia_large_directories/
+          retention-days: 21
+          if-no-files-found: error
