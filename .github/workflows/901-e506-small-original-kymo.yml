@@ -1,0 +1,38 @@
+name: "901 E506 original gl kymograph CRC source and low-volume pixel extraction"
+on:
+  push:
+    branches: [cloud-901-e506-original-pixel-audit-20261116]
+    paths:
+      - ".github/workflows/901-e506-small-original-kymo.yml"
+      - "research_901/E506_20261116/verified_gl_kymograph.py"
+permissions:
+  contents: read
+jobs:
+  three-original-GLs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        archive:
+          - 20221220_E08_GFP_pl.zip
+          - 20221220_NO_LIGHT_E08_GFP_pl.zip
+          - 20221220_NO_LIGHT_E08_GFP.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E506_20261116
+      - run: python -m pip install -q requests
+      - name: Source-original kymo TIFF plus exact MoMA six-frame CRC verification
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+        run: python research_901/E506_20261116/verified_gl_kymograph.py --archive "$ARCHIVE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E506-original-kymo-${{ matrix.archive }}
+          path: e506_bounded/
+          retention-days: 21
+          if-no-files-found: warn
