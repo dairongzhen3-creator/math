@@ -58,7 +58,7 @@ while i<len(cd):
  h=struct.unpack_from('<4s6H3I5H2I',cd,i);assert h[0]==b'PK\x01\x02'
  nl,el,cl=h[10:13];name=cd[i+46:i+46+nl].decode('utf8' if h[3]&2048 else 'cp437','replace')
  ex=cd[i+46+nl:i+46+nl+el];s=pathlib.PurePosixPath(name).name
- gl_hit=f'/{gl}/' in name
+ gl_hit=f'/{gl}/' in name and '__BKP' not in name
  selected=gl_hit and ((s.startswith('glf_') and s.endswith('.png') and s[4:-4].isdigit() and int(s[4:-4]) in targetframes) or s.startswith('CellStats__') and s.endswith('.csv'))
  tif=gl_hit and (s.endswith('.tif') and ('MMStack' in s or 'CellMasks' in s))
  if selected or tif:
