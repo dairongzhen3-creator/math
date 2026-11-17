@@ -1,0 +1,63 @@
+name: "901 E513 original TIFF zero-based source frame and pixel export roundtrip"
+on:
+  push:
+    branches: [cloud-901-e513-tiff-framezero-phc-reconciliation-20261117]
+    paths:
+      - ".github/workflows/901-e513-original-time-index-audit.yml"
+      - "research_901/E513_20261117/e513_source_frame_zero_based_audit.py"
+permissions:
+  actions: read
+  contents: read
+jobs:
+  phc-original-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - gl: Pos5_GL35
+            archive: 20221220_rplN_GFP_pl.zip
+          - gl: Pos12_GL22
+            archive: 20221220_E08_GFP_pl.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E513_20261117
+      - name: Install deterministic float image science dependencies
+        run: python -m pip install -q numpy
+      - name: Immutable originally authenticated source CellStats and event registry E508
+        uses: actions/download-artifact@v4
+        with:
+          name: 901-E508-source-events-${{ matrix.archive }}
+          run-id: 43818425435
+          github-token: ${{ github.token }}
+          path: input_E508/
+      - name: Immutable original phase TIFF float32 2D E510
+        uses: actions/download-artifact@v4
+        with:
+          name: 901-E510-original-2D-${{ matrix.gl }}
+          run-id: 43822194586
+          github-token: ${{ github.token }}
+          path: input_E510/
+      - name: Immutable original component forest and probability TIFF receipts E512
+        uses: actions/download-artifact@v4
+        with:
+          name: 901-E512-full-verified-original-${{ matrix.archive }}
+          run-id: 43827391164
+          github-token: ${{ github.token }}
+          path: input_E512/
+      - name: Lock old mislabeled TIFF frames; match actual source cell PHC sums and recalc 37 true-index event windows
+        env:
+          GL: ${{ matrix.gl }}
+        run: python research_901/E513_20261117/e513_source_frame_zero_based_audit.py --gl "$GL"
+      - name: Preserve all exact source roundtrip records, frame SHA and corrected metadata without overwriting historical images
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E513-corrected-source-zero-based-${{ matrix.gl }}
+          path: e513_zero_based_time_audit/
+          retention-days: 30
+          if-no-files-found: warn
