@@ -1,45 +1,75 @@
-name: "901 E512b source component masks and Div to Map curation chain"
+name: "901 E516 independent published Omnipose pretrained phase-contrast preflight"
 on:
   push:
-    branches: [cloud-901-e512-original-probability-component-audit-20261116]
+    branches: [cloud-901-e516-independent-bacterial-phase-model-20261117]
     paths:
       - ".github/workflows/901-e512b-solver-constraints.yml"
-      - "research_901/E512_20261116/e512_software_solution_lineage_audit.py"
+      - "research_901/E516_20261117/e516_pretrained_bact_phase_omni_frozen.py"
 permissions:
-  actions: read
   contents: read
+  actions: read
 jobs:
-  direct-optimizer-contrast:
+  preflight-independent-segmentation:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
         include:
           - gl: Pos5_GL35
-            archive: 20221220_rplN_GFP_pl.zip
+            artifact: 14204949075
           - gl: Pos12_GL22
-            archive: 20221220_E08_GFP_pl.zip
+            artifact: 14205890031
+    env:
+      CELLPOSE_LOCAL_MODELS_PATH: ${{ runner.temp }}/E516_models
+      OMP_NUM_THREADS: 2
+      NUMBA_NUM_THREADS: 2
+      MKL_NUM_THREADS: 2
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            research_901/E512_20261116
-      - uses: actions/download-artifact@v4
+            research_901/E516_20261117
+      - uses: actions/setup-python@v5
         with:
-          name: 901-E512-full-verified-original-${{ matrix.archive }}
-          path: verified_e512
-          run-id: 43827391164
-          github-token: ${{ github.token }}
-      - name: Verify previously original-CRC authenticated E512 artifact SHA and compare software branches at all disputed frames
+          python-version: "3.10"
+      - name: Install pinned published Omnipose 1.1.4 CPU prerequisites, not yanked Omnipose 2
+        run: |
+          python -m pip install -q --upgrade pip
+          python -m pip install -q --index-url https://download.pytorch.org/whl/cpu "torch==2.4.1+cpu"
+          python -m pip install -q "omnipose==1.1.4"
+          python -m pip freeze > E516_exact_pip_freeze.txt
+          python -c "import omnipose,torch; print('E516_INSTALLED', torch.__version__)"
+      - name: Retrieve immutable original 2D TIFF float32 pixels from E510 authenticated artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ matrix.artifact }}
+          GL: ${{ matrix.gl }}
+        run: |
+          mkdir -p incoming
+          curl -fSL --retry 4 --retry-all-errors --connect-timeout 25 --max-time 200 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/dairongzhen3-creator/math/actions/artifacts/${ARTIFACT_ID}/zip" \
+            -o "incoming/901_E510_${GL}_original_pixels.zip"
+      - name: Verify frozen original pixel archive and real independent model + weight SHA; inference preflight on 8 frames
         env:
           GL: ${{ matrix.gl }}
-        run: python research_901/E512_20261116/e512_software_solution_lineage_audit.py --gl "$GL"
-      - uses: actions/upload-artifact@v4
+        run: |
+          python research_901/E516_20261117/e516_pretrained_bact_phase_omni_frozen.py \
+            --gl "${GL}" \
+            --e510-zip "incoming/901_E510_${GL}_original_pixels.zip" \
+            --output E516_out \
+            --preflight-count 8
+      - name: Always preserve version/install and any model validation diagnostic
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: 901-E512b-original-solver-contrast-${{ matrix.gl }}
-          path: e512_optimization_audit/
+          name: 901-E516-frozen-published-Omnipose-${{ matrix.gl }}
+          path: |
+            E516_out
+            E516_exact_pip_freeze.txt
           retention-days: 30
           if-no-files-found: warn
