@@ -1,0 +1,43 @@
+name: "901 E530 original MoMA two-pixel source certification"
+on:
+  push:
+    branches:
+      - cloud-901-e530-historical-cost-source-and-range-fix-20261117
+    paths:
+      - '.github/workflows/901-e530-two-pixels-validated.yml'
+      - 'research_901/E530_20261117/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E529_20261117
+            research_901/E530_20261117
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install verified published compatibility pins
+        run: |
+          python -VV
+          python -m pip install --no-input --disable-pip-version-check "numpy==2.3.5" "tifffile==2026.9.20" "requests==2.32.5"
+          python -c "import sys,numpy,tifffile,requests; assert sys.version_info[:2]==(3,13); print('VERSIONS',numpy.__version__,tifffile.__version__,requests.__version__)"
+      - name: Parse source script and strictly read authenticated ZIP64 originals
+        run: |
+          python -m py_compile research_901/E529_20261117/e529_official_two_prob_pixels.py
+          python research_901/E529_20261117/e529_official_two_prob_pixels.py
+      - name: Preserve verified result OR exact failure traceback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E530-original-two-pixels-or-failure
+          path: E529_outputs/
+          retention-days: 14
+          if-no-files-found: warn
