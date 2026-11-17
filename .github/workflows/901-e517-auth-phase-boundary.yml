@@ -1,0 +1,64 @@
+name: "901 E517 official phase-TIFF optical boundary diagnostics (no pretrained model)"
+on:
+  push:
+    branches: [cloud-901-e517-external-model-blocked-optical-roi-20261117]
+    paths:
+      - ".github/workflows/901-e517-auth-phase-boundary.yml"
+      - "research_901/E517_20261117/*.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source-phase-optical-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E517_20261117
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -q numpy scipy scikit-image
+      - name: Retrieve two immutable original E510 source-pixel artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p verified_source
+          curl -fSL --retry 5 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/dairongzhen3-creator/math/actions/artifacts/14204949075/zip" \
+            -o verified_source/901_E510_Pos5_GL35_original_pixels.zip
+          curl -fSL --retry 5 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/dairongzhen3-creator/math/actions/artifacts/14205890031/zip" \
+            -o verified_source/901_E510_Pos12_GL22_original_pixels.zip
+      - name: Execute E517 class-blind gradient and independent Otsu boundary checks twice
+        run: |
+          python research_901/E517_20261117/e517_blind_roi_optical_boundary_audit.py --input-root verified_source --output output
+          python research_901/E517_20261117/e517_image_only_threshold_crossing_audit.py --input-root verified_source --output output
+          python research_901/E517_20261117/e517_blind_roi_optical_boundary_audit.py --input-root verified_source --output replay
+          python research_901/E517_20261117/e517_image_only_threshold_crossing_audit.py --input-root verified_source --output replay
+          python - <<'PY'
+          import pathlib,hashlib
+          a,b=pathlib.Path('output'),pathlib.Path('replay')
+          files=sorted([x for x in a.iterdir() if x.is_file()])
+          assert len(files)==7,len(files)
+          for f in files:
+              x=hashlib.sha256(f.read_bytes()).hexdigest()
+              y=hashlib.sha256((b/f.name).read_bytes()).hexdigest()
+              assert x==y,(f.name,x,y)
+              print('E517_CLOUD_REPLAY_SHA_PASS',f.name,x)
+          print('E517_CLOUD_COMPLETE_NO_PRETRAINED_MODEL',len(files))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E517-original-phase-boundary-optical-audit
+          path: output/
+          retention-days: 30
+          if-no-files-found: warn
