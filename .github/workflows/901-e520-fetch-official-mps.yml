@@ -1,0 +1,45 @@
+name: "901 E520 source-authenticated official Gurobi MPS LP retrieval"
+on:
+  workflow_dispatch:
+  push:
+    branches: [cloud-901-e520-pruned-ilp-vs-cellstats-mps-gate-20261117]
+    paths:
+      - ".github/workflows/901-e520-fetch-official-mps.yml"
+      - "research_901/E520_20261117/e520_zip64_targeted_gurobi_mps_fetch_cloud_memorysafe.py"
+permissions:
+  contents: read
+jobs:
+  official-zip64-gurobi-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - gl: Pos5_GL35
+            archive: 20221220_rplN_GFP_pl.zip
+          - gl: Pos12_GL22
+            archive: 20221220_E08_GFP_pl.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            research_901/E520_20261117
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -q requests
+      - name: Strict HTTP206 original BioImage Archive ZIP64 central-directory local-header CRC SHA verification
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          python research_901/E520_20261117/e520_zip64_targeted_gurobi_mps_fetch_cloud_memorysafe.py --archive "$ARCHIVE" --output E520_official_models
+      - name: Keep ONLY authenticated real original artifacts or source failure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E520-original-MPS-LP-${{ matrix.gl }}
+          path: E520_official_models/
+          retention-days: 30
+          if-no-files-found: warn
