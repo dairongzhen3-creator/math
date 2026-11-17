@@ -48,7 +48,7 @@ jobs:
                       with urllib.request.urlopen(req,timeout=100) as rsp:
                           assert rsp.status==200 and rsp.headers.get('Content-Type','').startswith(('application/zip','application/octet-stream'))
                           bb=rsp.read()
-                      if bb[:4]!=b"PK\\x03\\x04":raise RuntimeError("not ZIP")
+                      if bb[:4]!=bytes.fromhex("504b0304"):raise RuntimeError("not ZIP")
                       pathlib.Path("input",name).write_bytes(bb)
                       print("E514_INPUT_RECEIPT",name,len(bb),hashlib.sha256(bb).hexdigest())
                       break
