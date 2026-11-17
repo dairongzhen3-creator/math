@@ -141,7 +141,7 @@ def main():
         official_manifest_sha256=MANIFEST_SHA,exact_tiff_full_sha_crc_for_both=True,
         cases=results, passed_e528_component_cost_tolerance=sum(x["source_agrees_to_e528_tolerance_1e_minus_7"] for x in results),
         n_cases=2, scope="original software model probability and component price only",
-        2022_binary_feature_flag_independently_verified=False,
+        historical_2022_binary_feature_flag_independently_verified=False,
         independent_biological_division_ground_truth="UNRESOLVED",
         physical_bits_per_second_per_joule="NOT_IDENTIFIED",
         original_full_gurobi_mps="UNAVAILABLE")
