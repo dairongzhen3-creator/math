@@ -1,0 +1,90 @@
+name: "901 E532 verify two original EBI MoMA TIFF pixels"
+on:
+  push:
+    paths:
+      - ".github/workflows/901-e532-official-tiff-pixels.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: "p901-e532-auth-original-two-pixels"
+  cancel-in-progress: false
+jobs:
+  verify-original:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - name: Checkout frozen historical 901 read-only source
+        uses: actions/checkout@v4
+        with:
+          ref: b7460f5b7fe7a89b665f55f0004a5c340d4d6009
+          sparse-checkout: |
+            research_901/E529_20261117
+          persist-credentials: false
+      - name: Provenance of exact frozen Python source and GitHub run
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p E529_outputs
+          actual=$(git hash-object research_901/E529_20261117/e529_official_two_prob_pixels.py)
+          test "$actual" = "fca5ce93d5723a26520f685b6c5dae238743d1ee"
+          printf 'github_run=%s\nsource_commit=%s\nsource_blob=%s\n' \
+            "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "b7460f5b7fe7a89b665f55f0004a5c340d4d6009" "$actual" \
+            > E529_outputs/E532_run_provenance.txt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned published dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -VV
+          python -m pip install --no-input --disable-pip-version-check \
+            "numpy==2.3.5" "tifffile==2026.9.20" "requests==2.32.5"
+          python -c "import numpy,tifffile,requests;print('DEPENDENCIES',numpy.__version__,tifffile.__version__,requests.__version__)"
+      - name: Strict HTTP 206 plus full original TIFF SHA256/CRC before pixel extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile research_901/E529_20261117/e529_official_two_prob_pixels.py
+          python research_901/E529_20261117/e529_official_two_prob_pixels.py
+      - name: Compare raw float32 with pre-registered E531 tree proxies, no tuning
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os,pathlib,struct
+          p=pathlib.Path("E529_outputs/E529_original_two_pixel_official_verification.json")
+          d=json.loads(p.read_text())
+          expected={
+           "Pos5_GL35":(0.5183219909667969,(0.5181416470,0.5183499855),"2d06799a61c6b37c1494360d745024168ff951e4bfab0f8a0b6bf9d1db7ba9c8"),
+           "Pos12_GL22":(0.5545350909233093,(0.5543892442,0.5545953826),"bea1570256e7043a8af2a0430865b64771ca940d379612af7efdd5c6e15aa7bd")
+          }
+          out={"github_run_id":os.environ.get("GITHUB_RUN_ID"),"stage":"901 E532",
+               "source_tiff_crc_sha_authenticated":d.get("exact_tiff_full_sha_crc_for_both",False),
+               "results":{},"biology_truth":"UNRESOLVED","physical_bit_joule":"NOT_IDENTIFIED"}
+          for c in d["cases"]:
+              gl=c["gl"];v,bounds,sha=expected[gl]
+              actual=float(c["original_probability"])
+              assert c["provenance"]["full_tiff_sha256"]==sha
+              is_same=struct.pack("<f",actual)==struct.pack("<f",v)
+              out["results"][gl]={"observed_original_TIFF_float32":actual,
+                "pre_registered_E531_threshold_proxy":v,
+                "same_float32_bits":is_same,"inside_E529_interval":bounds[0]<=actual<=bounds[1],
+                "original_pixel_array_index":c["requested_tiff_array_index_zero_based"],
+                "pixel_xy":c["source_pixel_xy"],
+                "full_tiff_sha256":sha}
+          assert set(out["results"])==set(expected)
+          result=pathlib.Path("E529_outputs/E532_original_vs_tree_proxies.json")
+          result.write_text(json.dumps(out,sort_keys=True,ensure_ascii=False,indent=2)+"\n")
+          print("E532_SOURCE_PX",json.dumps(out,ensure_ascii=False),flush=True)
+          PY
+      - name: Preserve successful results or exact failure receipt
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 901-E532-certified-two-original-TIFF-pixels
+          path: E529_outputs/
+          retention-days: 14
+          if-no-files-found: warn
