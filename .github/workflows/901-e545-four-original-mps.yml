@@ -1,0 +1,57 @@
+name: "901 E545 - four original Gurobi MPS via bounded ZIP64 HTTP 206"
+on:
+  workflow_dispatch:
+    inputs:
+      include_lp:
+        description: "Also get 4 original LP files (~13 MB additional compressed)"
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - ".github/workflows/901-e545-four-original-mps.yml"
+permissions:
+  contents: read
+concurrency:
+  group: "p901-e545-original-source-models"
+  cancel-in-progress: false
+jobs:
+  read-only-source:
+    if: github.repository == 'dairongzhen3-creator/math'
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - name: Checkout 901-only source extractor
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            research_901/E545_20261118
+      - name: Use Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install requests and verify source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-input --disable-pip-version-check "requests==2.32.5"
+          python -m py_compile research_901/E545_20261118/E545_official_HTTP206_ZIP64_model_extractor.py
+          python research_901/E545_20261118/E545_official_HTTP206_ZIP64_model_extractor.py --self-test
+      - name: Read exact MPS original ZIP members (not multi-GB archives)
+        shell: bash
+        env:
+          WANT_LP: ${{ inputs.include_lp }}
+        run: |
+          set -euo pipefail
+          if [[ "$WANT_LP" == "true" ]]; then EXTRA="--with-lp"; else EXTRA=""; fi
+          python research_901/E545_20261118/E545_official_HTTP206_ZIP64_model_extractor.py --dest E545_outputs $EXTRA
+      - name: Preserve verified model files or precise source access error receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "901-E545-original-source-Gurobi-models-or-source-error"
+          path: E545_outputs/
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 14
