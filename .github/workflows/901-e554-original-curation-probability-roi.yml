@@ -1,0 +1,29 @@
+name: 901 E554 original MoMA curation and microscopy source intake
+on:
+  push:
+    paths:
+      - 'research_901/E554_20261118/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source_intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU-only imaging dependencies
+        run: python -m pip install --disable-pip-version-check requests==2.32.5 numpy tifffile pillow
+      - name: Strict official ZIP64 HTTP206 intake, original image excerpts and source logs
+        run: python research_901/E554_20261118/E554_official_original_roi_and_curation_intake.py --output "$RUNNER_TEMP/901_E554"
+      - name: Preserve positive and negative source audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 901-E554-official-curation-probability-phase-source-evidence
+          path: ${{ runner.temp }}/901_E554/
+          retention-days: 14
+          if-no-files-found: warn
