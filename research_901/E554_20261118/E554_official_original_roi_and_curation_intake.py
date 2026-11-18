@@ -53,24 +53,45 @@ def frames_tif(path,gl,role,output):
     config=ROIS[gl]
     with tifffile.TiffFile(str(path)) as tif:
         pages=tif.pages
-        n=len(pages)
-        frames=set(range(config["focus"]-5,config["focus"]+6))
+        series=tif.series[0]
+        focus=config["focus"]
+        frames=set(range(focus-5,focus+6))
         for a in config["anchors"]:frames.update([a-1,a,a+1])
-        indices=sorted(i for i in frames if 0<=i<n)
-        assert n>=config["focus"]+6,("TIFF not expected frame stack",gl,role,n,tif.series[0].shape)
-        arrays=[np.asarray(pages[i].asarray()) for i in indices]
+        if role=="phase_contrast":
+            # Verified by E510 official TIFF receipt: 1036 times, 3 channels, 300 x 106.
+            # MoMA preprocessing uses channel index 0 for phase contrast.
+            assert len(series.shape)==4 and tuple(series.shape[:2])==(1036,3),(gl,role,series.shape)
+            assert series.shape[-2:]==(300,106),(gl,series.shape)
+            assert len(pages)==1036*3,(gl,role,len(pages),series.shape)
+            n=1036
+            indices=sorted(i for i in frames if 0<=i<n)
+            arrays=[np.asarray(pages[3*i].asarray()) for i in indices]
+            page_map={str(i):int(3*i) for i in indices}
+            channel=0
+        else:
+            n=len(pages)
+            assert n==1036,(gl,role,n,series.shape)
+            indices=sorted(i for i in frames if 0<=i<n)
+            arrays=[np.asarray(pages[i].asarray()) for i in indices]
+            page_map={str(i):int(i) for i in indices}
+            channel=None
+        assert n>=focus+6
         shape=arrays[0].shape
         assert all(a.shape==shape and a.ndim==2 for a in arrays),(gl,role,shape)
+        assert shape==(300,106),(gl,role,shape)
         data=np.stack(arrays)
         npz=output/(gl+"_"+role+"_selected_source_frames.npz")
-        np.savez_compressed(npz,frame_page_indices=np.asarray(indices,dtype=np.int32),images=data)
-        for k in [config["focus"]-1, config["focus"],config["focus"]+1]:
+        np.savez_compressed(npz,original_frame_numbers=np.asarray(indices,dtype=np.int32),images=data)
+        for k in [focus-1,focus,focus+1]:
             if k in indices:
-                normalize_preview(data[indices.index(k)]).save(output/(gl+"_"+role+"_page"+str(k)+".png"))
-        return {"role":role,"page_count":n,"source_page_shape":list(shape),
-                "source_series_shape":list(tif.series[0].shape),
-                "source_dtype":str(data.dtype),"selected_page_indices":indices,
+                normalize_preview(data[indices.index(k)]).save(output/(gl+"_"+role+"_frame"+str(k)+".png"))
+        return {"role":role,"frame_count":n,"source_page_count":len(pages),
+                "source_page_shape":list(shape),"source_series_shape":list(series.shape),
+                "source_series_axes":str(series.axes),"source_channel_zero_based":channel,
+                "original_frame_to_tiff_page":page_map,
+                "source_dtype":str(data.dtype),"selected_frame_indices":indices,
                 "source_frames_npz_sha256":sha256(npz),"npz_bytes":npz.stat().st_size}
+
 def main(output):
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     source_bytes=E545_SOURCE.read_bytes()
